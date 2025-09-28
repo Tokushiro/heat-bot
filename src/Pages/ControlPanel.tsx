@@ -1,11 +1,13 @@
 import { Layout, Row, Col, Typography, Button, Space, Tag} from "antd";
 import {ModeCard} from '../components/ModeCard';
 import { RobotOutlined, ExperimentOutlined, LeftOutlined } from "@ant-design/icons";
+import { useNavigate } from "react-router-dom";
 
 const { Header, Content } = Layout;
 const { Title, Text } = Typography;
 
 export default function ControlPanel() {
+    const navigate = useNavigate();
     return (
         <Layout>
             <Header
@@ -27,6 +29,7 @@ export default function ControlPanel() {
                         type="link"
                         icon={<LeftOutlined />}
                         style={{ padding: 0, fontSize: 14 }}
+                        onClick={() => navigate(-1)}
                     >
                         Back
                     </Button>

@@ -1,9 +1,12 @@
 import { Card, Avatar, Typography, Button, Tag } from "antd";
 import { RobotOutlined } from "@ant-design/icons";
+import { useNavigate } from "react-router-dom";
+
 
 const { Title, Text } = Typography;
 
 export default function RobotControlCard() {
+    const navigate = useNavigate();
     return (
         <div
             style={{
@@ -43,6 +46,7 @@ export default function RobotControlCard() {
                     type="primary"
                     block
                     style={{ marginTop: 16, borderRadius: "6px" }}
+                    onClick={() => navigate("/controlpanel")}
                 >
                     Open Control Panel
                 </Button>
