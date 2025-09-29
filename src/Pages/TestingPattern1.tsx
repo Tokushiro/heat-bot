@@ -1,8 +1,8 @@
-import {Layout, Button, Space, Tag, Typography} from "antd";
+import {Layout, Button, Space, Tag, Typography, Flex, Card} from "antd";
 import { LeftOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 
-const {Text} = Typography;
+const {Text, Title} = Typography;
 const { Header, Content } = Layout;
 
 export default function TestingPattern1() {
@@ -69,7 +69,36 @@ export default function TestingPattern1() {
                     </Space>
                 </div>
             </Header>
-            <Content>
+            <Content
+                style={{
+                    height:'100vh'
+            }}>
+                <div
+                    style={{
+                        flex: 1 ,
+                        textAlign: "center",
+                    }}>
+                <Title level={2}>Testing Pattern 1</Title>
+                <Text>Monitor robot performance and communication logs in real-time</Text>
+                </div>
+                <br/>
+                <Flex gap={"middle"} justify={"center"} align={"center"}>
+                    <Card
+                        style={{
+                            width: "80vh",
+                            height:"80vh"
+                    }}>
+                        <Title></Title>
+
+                    </Card>
+                    <Card
+                        style={{
+                        width: "80vh",
+                        height:"80vh"
+                    }}>
+
+                    </Card>
+                </Flex>
 
             </Content>
 
