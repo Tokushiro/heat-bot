@@ -42,14 +42,17 @@ export default function ControlPanel() {
                                 background: "#1677ff",
                                 color: "#fff",
                                 padding: "4px",
-                                borderRadius: "99px",
-                                fontWeight: 500,
-                                fontSize: 14,
+                                height: "20px",
+                                width: "20px"
                             }}
                         >
-                            RoboControl-X1
                         </div>
-                        <Tag color="green">Connected</Tag>
+                        <Text> RoboControl-X1</Text>
+                        <Tag color="green"
+                             style={{
+                                 borderRadius: "99px",
+                             }}
+                        >Connected</Tag>
                     </Space>
                 </div>
 
@@ -79,6 +82,7 @@ export default function ControlPanel() {
                                 title="Manual Control"
                                 desc="Direct control of robot movements and actions"
                                 button="Start Manual Control"
+                                path="/controlpanel"
                             />
                         </Col>
 
@@ -88,6 +92,7 @@ export default function ControlPanel() {
                                 title="Testing Pattern 1"
                                 desc="Execute predefined testing sequence with monitoring"
                                 button="Start Pattern 1"
+                                path="/testingpattern1"
                             />
                         </Col>
 
@@ -97,6 +102,7 @@ export default function ControlPanel() {
                                 title="Testing Pattern 2"
                                 desc="Advanced testing sequence with detailed analytics"
                                 button="Start Pattern 2"
+                                path="/testingpattern2"
                             />
                         </Col>
                     </Row>

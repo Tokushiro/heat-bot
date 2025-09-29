@@ -1,4 +1,6 @@
 import {Card, Space, Avatar, Typography, Button} from "antd";
+import {useNavigate} from "react-router-dom";
+
 const { Title, Text } = Typography;
 
 export function ModeCard({
@@ -6,12 +8,16 @@ export function ModeCard({
                       title,
                       desc,
                       button,
+                      path,
                   }: {
     icon: React.ReactNode;
     title: string;
     desc: string;
     button: string;
+    path: string;
 }) {
+
+    const navigate = useNavigate();
     return (
         <Card
             hoverable
@@ -22,7 +28,7 @@ export function ModeCard({
                 <Avatar size={48} icon={icon} style={{ background: "#e6f4ff" }} />
                 <Title level={4} style={{ marginBottom: 4 }}>{title}</Title>
                 <Text type="secondary" style={{ textAlign: "center" }}>{desc}</Text>
-                <Button type="primary" block style={{ marginTop: 8, borderRadius: 8 }}>
+                <Button type="primary" block style={{ marginTop: 8, borderRadius: 8 }} onClick={() => navigate(path)}>
                     {button}
                 </Button>
             </Space>
