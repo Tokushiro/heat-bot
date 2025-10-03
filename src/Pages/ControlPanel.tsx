@@ -1,5 +1,5 @@
 import { Layout, Row, Col, Typography, Button, Space, Tag} from "antd";
-import {ModeCard} from '../components/ModeCard';
+import {ModeCard} from '../Components/modeCard.tsx';
 import { RobotOutlined, ExperimentOutlined, LeftOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 

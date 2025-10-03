@@ -1,6 +1,7 @@
 import {Layout, Button, Space, Tag, Typography, Flex, Card} from "antd";
 import { LeftOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
+import {LogCard} from '../Components/logCard.tsx';
 
 const {Text, Title} = Typography;
 const { Header, Content } = Layout;
@@ -88,7 +89,8 @@ export default function TestingPattern1() {
                             width: "80vh",
                             height:"80vh"
                     }}>
-                        <Title></Title>
+                        <Title level={5}>Robot Communication & Movement Log</Title>
+                        <LogCard tag={"test"} information={"Testing how component wokrs"} tagColour={"red"}/>
 
                     </Card>
                     <Card
