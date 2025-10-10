@@ -8,13 +8,14 @@ export function ModeCard({
                       title,
                       desc,
                       button,
-                      path,
+                      path, customButton,
                   }: {
     icon: React.ReactNode;
     title: string;
     desc: string;
-    button: string;
-    path: string;
+    button?: string;
+    path?: string;
+    customButton?: React.ReactNode;
 }) {
 
     const navigate = useNavigate();
@@ -28,9 +29,19 @@ export function ModeCard({
                 <Avatar size={48} icon={icon} style={{ background: "#e6f4ff" }} />
                 <Title level={4} style={{ marginBottom: 4 }}>{title}</Title>
                 <Text type="secondary" style={{ textAlign: "center" }}>{desc}</Text>
-                <Button type="primary" block style={{ marginTop: 8, borderRadius: 8 }} onClick={() => navigate(path)}>
-                    {button}
-                </Button>
+
+                {customButton ? (
+                    customButton
+                ) : (
+                    <Button
+                        type="primary"
+                        block
+                        style={{ marginTop: 8, borderRadius: 8 }}
+                        onClick={() => navigate(path ?? "/")}
+                    >
+                        {button}
+                    </Button>
+                )}
             </Space>
         </Card>
     );

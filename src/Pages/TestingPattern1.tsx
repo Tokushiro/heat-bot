@@ -1,6 +1,7 @@
-import {Layout, Button, Space, Tag, Typography, Flex, Card} from "antd";
+import {Layout, Button, Space, Tag, Typography, Flex, Card, Divider} from "antd";
 import { LeftOutlined } from "@ant-design/icons";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation, Navigate } from "react-router-dom";
+import type { TestSelectionValues } from "../Components/testSelectionModal.tsx";
 import {LogCard} from '../Components/logCard.tsx';
 
 const {Text, Title} = Typography;
@@ -8,6 +9,9 @@ const { Header, Content } = Layout;
 
 export default function TestingPattern1() {
     const navigate = useNavigate();
+    const { state } = useLocation();
+    const data = state as TestSelectionValues | undefined;
+    if (!data) return <Navigate to="/controlpanel" replace />;
 
     return (
         <Layout>
@@ -35,7 +39,16 @@ export default function TestingPattern1() {
                     </Button>
                 </div>
 
-                <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
+                <div
+                    style={{
+                        position: "absolute",
+                        left: "50%",
+                        transform: "translateX(-50%)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                    }}
+                >
                     <Space>
                         <div
                             style={{
@@ -43,28 +56,22 @@ export default function TestingPattern1() {
                                 color: "#fff",
                                 padding: "4px",
                                 height: "20px",
-                                width: "20px"
+                                width: "20px",
                             }}
-                        >
-                        </div>
+                        />
                         <Text> RoboControl-X1</Text>
-                        <Tag color="purple"
-                        style={{
-                            borderRadius: "99px",
-                        }}
-                        >Testing Pattern 1</Tag>
+                        <Tag color="purple" style={{ borderRadius: "99px" }}>
+                            {data.testType}
+                        </Tag>
                     </Space>
                 </div>
 
-                <div style={{ flex: 1 }} />
-                <div style={{ flex: 1 , display: "flex", justifyContent: "right" }}>
+                <div style={{ flex: 1, display: "flex", justifyContent: "right" }}>
                     <Space>
-                        <Button
-                        color="primary" variant="solid">
+                        <Button color="primary" variant="solid">
                             Start
                         </Button>
-                        <Button
-                        color="red" variant="solid">
+                        <Button color="red" variant="solid">
                             Stop
                         </Button>
                     </Space>
@@ -79,26 +86,86 @@ export default function TestingPattern1() {
                         flex: 1 ,
                         textAlign: "center",
                     }}>
-                <Title level={2}>Testing Pattern 1</Title>
+                <Title level={2}>{data.customTestName}</Title>
                 <Text>Monitor robot performance and communication logs in real-time</Text>
                 </div>
                 <br/>
                 <Flex gap={"middle"} justify={"center"} align={"center"}>
                     <Card
-                        style={{
-                            width: "80vh",
-                            height:"80vh"
-                    }}>
-                        <Title level={5}>Robot Communication & Movement Log</Title>
-                        <LogCard tag={"test"} information={"Testing how component wokrs"} tagColour={"red"}/>
+                        style={{ width: "80vh", height: "80vh", overflow: "hidden" }}
+                        bodyStyle={{ height: "100%", display: "flex", flexDirection: "column" }}
+                    >
+                        <Title level={5} style={{ marginBottom: 0 }}>
+                            Robot Communication & Movement Log
+                        </Title>
+                        <Divider style={{ margin: "12px 0" }} />
 
+                        <div
+                            style={{
+                                flex: 1,
+                                minHeight: 0,
+                                overflowY: "auto",
+                                paddingRight: 8,
+                            }}
+                        >
+                            <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+                                <LogCard tag="info"      information="Robot connected successfully"           tagColour="blue" />
+                                <LogCard tag="movement"  information="Robot moved forward 1 meter"            tagColour="green" />
+                                <LogCard tag="warning"   information="Low battery: 15% remaining"             tagColour="orange" />
+                                <LogCard tag="error"     information="Obstacle detected! Stopping movement."  tagColour="red" />
+                                <LogCard tag="test"      information="Testing how component wokrs"            tagColour="red" />
+                                <LogCard tag="info"      information="Robot connected successfully"           tagColour="blue" />
+                                <LogCard tag="movement"  information="Robot moved forward 1 meter"            tagColour="green" />
+                                <LogCard tag="warning"   information="Low battery: 15% remaining"             tagColour="orange" />
+                                <LogCard tag="error"     information="Obstacle detected! Stopping movement."  tagColour="red" />
+                                <LogCard tag="test"      information="Testing how component wokrs"            tagColour="red" />
+                                <LogCard tag="info"      information="Robot connected successfully"           tagColour="blue" />
+                                <LogCard tag="movement"  information="Robot moved forward 1 meter"            tagColour="green" />
+                                <LogCard tag="warning"   information="Low battery: 15% remaining"             tagColour="orange" />
+                                <LogCard tag="error"     information="Obstacle detected! Stopping movement."  tagColour="red" />
+                                <LogCard tag="test"      information="Testing how component wokrs"            tagColour="red" />
+                                <LogCard tag="info"      information="Robot connected successfully"           tagColour="blue" />
+                                <LogCard tag="movement"  information="Robot moved forward 1 meter"            tagColour="green" />
+                                <LogCard tag="warning"   information="Low battery: 15% remaining"             tagColour="orange" />
+                                <LogCard tag="error"     information="Obstacle detected! Stopping movement."  tagColour="red" />
+                                <LogCard tag="test"      information="Testing how component wokrs"            tagColour="red" />
+                            </Space>
+                        </div>
                     </Card>
-                    <Card
-                        style={{
-                        width: "80vh",
-                        height:"80vh"
-                    }}>
 
+                    <Card
+                        style={{ width: "80vh", height: "80vh", overflow: "hidden" }}
+                        bodyStyle={{ height: "100%", display: "flex", flexDirection: "column" }}
+                    >
+                        <Title level={5} style={{ marginBottom: 0 }}>
+                            Real time robot path monitoring on grid
+                        </Title>
+                        <Divider style={{ margin: "12px 0" }} />
+
+
+                        <div
+                            style={{
+                                flex: 1,
+                                minHeight: 0,
+                                overflow: "hidden",
+                                background: "#f0f2f5",
+                                borderRadius: 8,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontWeight: 500,
+                                letterSpacing: 0.3,
+                                userSelect: "none",
+                            }}
+                        >
+                            Robot Path Monitoring Grid Placeholder
+                        </div>
+
+                        <Divider style={{ margin: "12px 0" }} />
+
+                        <Flex>
+                            <Text>Battery 15%</Text>
+                        </Flex>
                     </Card>
                 </Flex>
 

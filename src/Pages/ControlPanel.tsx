@@ -1,15 +1,30 @@
 import { Layout, Row, Col, Typography, Button, Space, Tag} from "antd";
 import {ModeCard} from '../Components/modeCard.tsx';
+import TestSelectionModal, {type TestSelectionValues} from "../Components/testSelectionModal.tsx";
 import { RobotOutlined, ExperimentOutlined, LeftOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 
 const { Header, Content } = Layout;
 const { Title, Text } = Typography;
 
 export default function ControlPanel() {
     const navigate = useNavigate();
+    const [open, setOpen] = useState(false);
+
     return (
         <Layout>
+
+            <TestSelectionModal
+                open={open}
+                onClose={() => setOpen(false)}
+                initialValues={{ testType: "testPattern1"}}
+                onSubmit={async (values: TestSelectionValues) => {
+                    setOpen(false);
+                    navigate("/testingpattern1", { state: values });
+                }}
+            />
+
             <Header
                 style={{
                     position: "sticky",
@@ -89,19 +104,27 @@ export default function ControlPanel() {
                         <Col xs={24} sm={12} md={8} lg={8} xl={7} xxl={6}>
                             <ModeCard
                                 icon={<ExperimentOutlined />}
-                                title="Testing Pattern 1"
-                                desc="Execute predefined testing sequence with monitoring"
-                                button="Start Pattern 1"
-                                path="/testingpattern1"
+                                title="Start Testing"
+                                desc="Execute predefined testing sequences with monitoring"
+                                customButton={
+                                    <Button
+                                    type="primary"
+                                    block
+                                    style={{ marginTop: 8, borderRadius: 8 }}
+                                    onClick={() => setOpen(true)}
+                                    >
+                                        Start Testing
+                                    </Button>
+                                }
                             />
                         </Col>
 
                         <Col xs={24} sm={12} md={8} lg={8} xl={7} xxl={6}>
                             <ModeCard
                                 icon={<ExperimentOutlined />}
-                                title="Testing Pattern 2"
-                                desc="Advanced testing sequence with detailed analytics"
-                                button="Start Pattern 2"
+                                title="History"
+                                desc="Review past tests and download reports"
+                                button="View History"
                                 path="/testingpattern2"
                             />
                         </Col>
