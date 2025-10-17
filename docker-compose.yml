@@ -3,7 +3,7 @@ version: "3.9"
 services:
   db:
     build:
-      context: client/db
+      context: db
     container_name: heatbot-postgres
     ports:
       - "${POSTGRES_PORT}:5432"

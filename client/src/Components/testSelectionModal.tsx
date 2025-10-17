@@ -1,8 +1,6 @@
-// src/components/TestSelectionModal.tsx
 import React, { useState } from "react";
 import { Modal, Form, Input, Radio, Select } from "antd";
 import type { FormInstance } from "antd";
-//import {getAllSensors} from "../data_acces/db_selects.tsx"
 import type { SelectProps } from 'antd';
 
 export type TestSelectionValues = {
@@ -30,11 +28,6 @@ for (let i = 10; i < 36; i++) {
         label: i.toString(36) + i,
     });
 }
-
-//const sensors = await getAllSensors();
-//for (const sensor of sensors) {
-//    options.push({ label: sensor.sensor_name, value: sensor.sensor_id });
-//}
 
 export default function TestSelectionModal({
                                                open,
