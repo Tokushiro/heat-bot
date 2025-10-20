@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Modal, Form, Input, Radio, Select } from "antd";
 import type { FormInstance } from "antd";
 import type { SelectProps } from 'antd';
+import SensorInputModal from "./sensorInputModal.tsx";
 
 export type TestSelectionValues = {
     testType: "testPattern1" | "testPattern2";
@@ -38,6 +39,8 @@ export default function TestSelectionModal({
                                            }: Props) {
     const [form] = Form.useForm<TestSelectionValues>();
     const [submitting, setSubmitting] = useState(false);
+    const [openSensor, setOpen] = useState(false);
+
 
     const handleFinish = async (values: TestSelectionValues) => {
         try {
@@ -51,6 +54,15 @@ export default function TestSelectionModal({
 
 
     return (
+        <>
+        <SensorInputModal
+        open={openSensor}
+        onClose={() => setOpen(false)}
+        onSubmit={() => {
+            setOpen(false);
+        }}
+        />
+
         <Modal
             open={open}
             title={title}
@@ -96,9 +108,34 @@ export default function TestSelectionModal({
                     <Select
                         placeholder="Select sensors to include"
                         options={options}
+                        dropdownRender={(menu) => (
+                            <>
+                                {menu}
+                                <div
+                                    style={{
+                                        display: "flex",
+                                        justifyContent: "center",
+                                        padding: 8,
+                                        borderTop: "1px solid #f0f0f0",
+                                    }}
+                                >
+                                    <a
+                                        onClick={() => setOpen(true)}
+                                        style={{
+                                            color: "#1677ff",
+                                            fontWeight: 500,
+                                            cursor: "pointer",
+                                        }}
+                                    >
+                                        + Add new sensor
+                                    </a>
+                                </div>
+                            </>
+                        )}
                     />
                 </Form.Item>
             </Form>
         </Modal>
+        </>
     );
 }

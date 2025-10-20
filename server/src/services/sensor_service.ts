@@ -14,8 +14,8 @@ export async function insertSensor(sensor: Sensor): Promise<void> {
     } = sensor;
 
     const query = `
-    INSERT INTO sensors
-      (sensor_name, manufacturer, product_reference, description, hw_version, fw_version, mounting_height_m, notes)
+    INSERT INTO sensor
+      (name, manufacturer, product_reference, description, hw_version, sw_version, mounting_height, note)
     VALUES
       ($1, $2, $3, $4, $5, $6, $7, $8)
   `;
