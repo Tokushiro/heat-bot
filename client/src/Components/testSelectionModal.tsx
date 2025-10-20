@@ -3,6 +3,7 @@ import { Modal, Form, Input, Radio, Select } from "antd";
 import type { FormInstance } from "antd";
 import type { SelectProps } from 'antd';
 import SensorInputModal from "./sensorInputModal.tsx";
+import type {Sensor} from "../Types/sensor.ts";
 
 export type TestSelectionValues = {
     testType: "testPattern1" | "testPattern2";
