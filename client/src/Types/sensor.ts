@@ -1,5 +1,5 @@
 export type Sensor = {
-    sensor_id: string | null;
+    sensor_id: number | null;
     sensor_name: string;
     manufacturer: string;
     product_reference: string | null;
