@@ -44,7 +44,7 @@ export default function TestSelectionModal({
             setLoadingOptions(true);
             const res = await axios.get<Sensor[]>(`${baseURL}/api/sensors`, { signal });
             const opts: NonNullable<SelectProps["options"]> = res.data.map((s) => ({
-                value: String(s.sensor_id),
+                value: Number(s.sensor_id),
                 label: s.sensor_name,
             }));
             setOptions(opts);
