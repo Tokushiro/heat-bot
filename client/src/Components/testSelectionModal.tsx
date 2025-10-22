@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Modal, Form, Input, Radio, Select, message, Spin, Typography } from "antd";
+import { Modal, Form, Input, Radio, Select, message, Spin } from "antd";
 import type { FormInstance } from "antd";
 import type { SelectProps } from "antd";
 import SensorInputModal from "./sensorInputModal.tsx";
