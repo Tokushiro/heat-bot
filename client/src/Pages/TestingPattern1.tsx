@@ -2,6 +2,7 @@ import {Layout, Button, Space, Tag, Typography, Flex, Card, Divider} from "antd"
 import { LeftOutlined } from "@ant-design/icons";
 import { useNavigate, useLocation, Navigate } from "react-router-dom";
 import type {Test} from "../Types/test.ts"
+import type {TestDB} from "../Components/testCard.tsx";
 import {LogCard} from '../Components/logCard.tsx';
 
 const {Text, Title} = Typography;
@@ -10,7 +11,7 @@ const { Header, Content } = Layout;
 export default function TestingPattern1() {
     const navigate = useNavigate();
     const { state } = useLocation();
-    const data = state as Test | undefined;
+    const data = state as Test | undefined | TestDB;
     if (!data) return <Navigate to="/controlpanel" replace />;
 
     return (
@@ -60,9 +61,17 @@ export default function TestingPattern1() {
                             }}
                         />
                         <Text> RoboControl-X1</Text>
-                        <Tag color="purple" style={{ borderRadius: "99px" }}>
-                            Automatic
-                        </Tag>
+
+                        {state.status == null || state.status == "incomplete" ? (
+                            <Tag color="red" style={{ borderRadius: "99px" }}>
+                                incomplete
+                            </Tag>
+                        ) : (
+                            <Tag
+                                color="green" style={{ borderRadius: "99px" }}>
+                                {state.status}
+                            </Tag>
+                        )}
                     </Space>
                 </div>
 

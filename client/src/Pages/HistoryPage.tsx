@@ -1,9 +1,10 @@
 import { useNavigate } from "react-router-dom";
 import { Layout, Typography, Button, Space, Tag, Empty } from "antd";
 import { LeftOutlined } from "@ant-design/icons";
-import { useMemo, useState } from "react";
-import TestCard, { type TestDB } from "../Components/testCard.tsx"
-import type {Test} from "../Types/test.ts"
+import TestCard, { type TestDB } from "../Components/testCard.tsx";
+import { useEffect, useMemo, useState } from "react";
+import axios from "axios";
+import type {Test} from "../Types/test.ts";
 
 const { Header, Content } = Layout;
 const { Text, Title } = Typography;
@@ -11,44 +12,33 @@ const { Text, Title } = Typography;
 
 export default function HistoryPage() {
     const navigate = useNavigate();
-
     const baseURL = useMemo(() => "http://localhost:3000", []);
 
-    // Example data; replace with your DB data
-    const initialItems: TestDB[] = useMemo(
-        () => [
-            {
-                test_id: 1,
-                test_name: "Thermal Drift Characterization",
-                test_choice: 2,
-                sensor_id: 11,
-                test_date: new Date(Date.now() - 1000 * 60 * 60 * 2),
-                status: "complete",
-            },
-            {
-                test_id: 2,
-                test_name: "Sensor Array Calibration",
-                test_choice: 1,
-                sensor_id: 14,
-                test_date: new Date(Date.now() - 1000 * 60 * 60 * 26),
-                status: "incomplete",
-            },
-            {
-                test_id: 3,
-                test_name: "Motor PID Sweep",
-                test_choice: 1,
-                sensor_id: 18,
-                test_date: new Date(Date.now() - 1000 * 60 * 8),
-                status: "incomplete",
-            },
-        ],
-        []
-    );
+    const [items, setItems] = useState<TestDB[]>();
 
-    const [items, setItems] = useState<TestDB[]>(initialItems);
+    const handleDelete = (number?: number) => {
+        return(number)
+    };
 
-    const handleDelete = (id: number | null) => {
-        setItems(prev => prev.filter(x => x.test_id !== id));
+    useEffect(() => {
+        fetchTests()
+    });
+
+    const fetchTests = async () => {
+        try {
+            const res = await axios.get<Test[]>(`${baseURL}/api/test`);
+            const opts: TestDB[] = res.data.map((s) => ({
+                test_id: s.test_id,
+                test_name: s.test_name,
+                test_choice: s.test_choice,
+                sensor_id: s.sensor_id,
+                test_date: new Date(s.test_date),
+                status: "incomplete"
+            }));
+            setItems(opts);
+        } catch (err: unknown) {
+            console.error("Error fetching tests:", err);
+        }
     };
 
     return (
@@ -110,20 +100,20 @@ export default function HistoryPage() {
                     Test History
                 </Title>
                 <div style={{ maxWidth: 960, margin: "0 auto", padding: 16 }}>
-                    {items.length === 0 && (
+                    {items == null ? (
                         <Empty description="No history yet" />
+                    ) : (
+                        <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                            {items.map(item => (
+                                <TestCard
+                                    key={item.test_id ?? `test-${item.test_name}`}
+                                    test={item}
+                                    onContinue={() => navigate("/testingpattern1", { state: item })}
+                                    onDelete={() => handleDelete(item.test_id)}
+                                />
+                            ))}
+                        </Space>
                     )}
-
-                    <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                        {items.map(item => (
-                            <TestCard
-                                key={item.test_id ?? `test-${item.test_name}`}
-                                test={item}
-                                onContinue={() => navigate(`/tests/${item.test_id ?? "new"}/continue`)}
-                                onDelete={() => handleDelete(item.test_id)}
-                            />
-                        ))}
-                    </Space>
                 </div>
             </Content>
         </Layout>
