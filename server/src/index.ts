@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import sensorsRouter from "./routes/sensor_routes";
 import testChoiceRouter from "./routes/test_choice_rotues";
+import testRouter from "./routes/test_routes"
 
 const app = express();
 
@@ -17,6 +18,7 @@ app.use(express.json());
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 app.use("/api/sensors", sensorsRouter);
 app.use("/api/testchoice", testChoiceRouter);
+app.use("/api/test", testRouter)
 
 const PORT = Number(process.env.SERVER_PORT ?? 3000);
 app.listen(PORT, () => console.log(`API listening on http://localhost:${PORT}`));

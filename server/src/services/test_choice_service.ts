@@ -29,7 +29,7 @@ export async function insertTestChoice(testChoice: TestChoice): Promise<void> {
 export async function getAllTestChoices(): Promise<TestChoice[]> {
     const query = `
     SELECT
-      test_choice_id,
+      test_choice_id as test_id,
       test_name AS test_name,
       test_standard AS test_standard,
       test_method AS test_method,

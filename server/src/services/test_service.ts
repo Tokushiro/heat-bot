@@ -3,7 +3,6 @@ import type { Test } from "../models/test";
 
 export async function insertTest(test: Test): Promise<void> {
     const {
-        test_id,
         test_name,
         test_choice,
         sensor_id,
@@ -12,13 +11,12 @@ export async function insertTest(test: Test): Promise<void> {
 
     const query = `
     INSERT INTO test
-      (test_id, test_name, test_choice, sensor_id, test_date)
+      (test_name, test_choice, sensor_id, test_date)
     VALUES
-      ($1, $2, $3, $4, $5)
+      ($1, $2, $3, $4)
   `;
 
     const values = [
-        test_id,
         test_name,
         test_choice,
         sensor_id,
@@ -32,7 +30,7 @@ export async function insertTest(test: Test): Promise<void> {
 export async function getAllTests(): Promise<Test[]> {
     const query = `
     SELECT
-      test_id,
+      test_id as test_id,
       test_name AS test_name,
       test_choice AS test_choice,
       sensor_id AS sensor_id,
