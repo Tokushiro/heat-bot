@@ -3,7 +3,7 @@ version: "3.9"
 services:
   db:
     build:
-      context: client/db
+      context: db
     container_name: heatbot-postgres
     ports:
       - "${POSTGRES_PORT}:5432"
@@ -11,10 +11,9 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      PGDATA: ${PGDATA}
       TZ: ${TZ}
     volumes:
-      - db_data:${PGDATA}
+      - db_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s

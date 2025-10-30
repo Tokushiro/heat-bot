@@ -1,7 +1,8 @@
 import {Layout, Button, Space, Tag, Typography, Flex, Card, Divider} from "antd";
 import { LeftOutlined } from "@ant-design/icons";
 import { useNavigate, useLocation, Navigate } from "react-router-dom";
-import type { TestSelectionValues } from "../Components/testSelectionModal.tsx";
+import type {Test} from "../Types/test.ts"
+import type {TestDB} from "../Components/testCard.tsx";
 import {LogCard} from '../Components/logCard.tsx';
 
 const {Text, Title} = Typography;
@@ -10,7 +11,7 @@ const { Header, Content } = Layout;
 export default function TestingPattern1() {
     const navigate = useNavigate();
     const { state } = useLocation();
-    const data = state as TestSelectionValues | undefined;
+    const data = state as Test | undefined | TestDB;
     if (!data) return <Navigate to="/controlpanel" replace />;
 
     return (
@@ -60,9 +61,17 @@ export default function TestingPattern1() {
                             }}
                         />
                         <Text> RoboControl-X1</Text>
-                        <Tag color="purple" style={{ borderRadius: "99px" }}>
-                            {data.testType}
-                        </Tag>
+
+                        {state.status == null || state.status == "incomplete" ? (
+                            <Tag color="red" style={{ borderRadius: "99px" }}>
+                                incomplete
+                            </Tag>
+                        ) : (
+                            <Tag
+                                color="green" style={{ borderRadius: "99px" }}>
+                                {state.status}
+                            </Tag>
+                        )}
                     </Space>
                 </div>
 
@@ -86,7 +95,7 @@ export default function TestingPattern1() {
                         flex: 1 ,
                         textAlign: "center",
                     }}>
-                <Title level={2}>{data.customTestName}</Title>
+                <Title level={2}>{data.test_name}</Title>
                 <Text>Monitor robot performance and communication logs in real-time</Text>
                 </div>
                 <br/>
@@ -109,26 +118,7 @@ export default function TestingPattern1() {
                             }}
                         >
                             <Space direction="vertical" size="middle" style={{ width: "100%" }}>
-                                <LogCard tag="info"      information="Robot connected successfully"           tagColour="blue" />
-                                <LogCard tag="movement"  information="Robot moved forward 1 meter"            tagColour="green" />
-                                <LogCard tag="warning"   information="Low battery: 15% remaining"             tagColour="orange" />
-                                <LogCard tag="error"     information="Obstacle detected! Stopping movement."  tagColour="red" />
-                                <LogCard tag="test"      information="Testing how component wokrs"            tagColour="red" />
-                                <LogCard tag="info"      information="Robot connected successfully"           tagColour="blue" />
-                                <LogCard tag="movement"  information="Robot moved forward 1 meter"            tagColour="green" />
-                                <LogCard tag="warning"   information="Low battery: 15% remaining"             tagColour="orange" />
-                                <LogCard tag="error"     information="Obstacle detected! Stopping movement."  tagColour="red" />
-                                <LogCard tag="test"      information="Testing how component wokrs"            tagColour="red" />
-                                <LogCard tag="info"      information="Robot connected successfully"           tagColour="blue" />
-                                <LogCard tag="movement"  information="Robot moved forward 1 meter"            tagColour="green" />
-                                <LogCard tag="warning"   information="Low battery: 15% remaining"             tagColour="orange" />
-                                <LogCard tag="error"     information="Obstacle detected! Stopping movement."  tagColour="red" />
-                                <LogCard tag="test"      information="Testing how component wokrs"            tagColour="red" />
-                                <LogCard tag="info"      information="Robot connected successfully"           tagColour="blue" />
-                                <LogCard tag="movement"  information="Robot moved forward 1 meter"            tagColour="green" />
-                                <LogCard tag="warning"   information="Low battery: 15% remaining"             tagColour="orange" />
-                                <LogCard tag="error"     information="Obstacle detected! Stopping movement."  tagColour="red" />
-                                <LogCard tag="test"      information="Testing how component wokrs"            tagColour="red" />
+                                <LogCard tag="info" information={`Test ${data.test_name} created`} tagColour="blue" />
                             </Space>
                         </div>
                     </Card>

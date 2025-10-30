@@ -19,6 +19,7 @@ CREATE TABLE sensor (
 -- =========================
 CREATE TABLE test_choice (
                              test_choice_id SERIAL PRIMARY KEY,     -- auto-increment
+                             test_name      VARCHAR(50) NOT NULL,
                              test_standard  VARCHAR(50),
                              test_method    VARCHAR(25),
                              test_lab       VARCHAR(50)
@@ -32,6 +33,7 @@ CREATE TABLE test (
                       test_name   VARCHAR(50),
                       test_choice INT NOT NULL,
                       sensor_id   INT NOT NULL,
+                      test_date   TIMESTAMP NOT NULL,
                       CONSTRAINT fk_test_choice
                           FOREIGN KEY (test_choice) REFERENCES test_choice (test_choice_id)
                               ON UPDATE RESTRICT ON DELETE RESTRICT,

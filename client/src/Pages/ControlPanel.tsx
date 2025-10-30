@@ -1,7 +1,8 @@
 import { Layout, Row, Col, Typography, Button, Space, Tag} from "antd";
 import {ModeCard} from '../Components/modeCard.tsx';
-import TestSelectionModal, {type TestSelectionValues} from "../Components/testSelectionModal.tsx";
-import { RobotOutlined, ExperimentOutlined, LeftOutlined } from "@ant-design/icons";
+import TestSelectionModal from "../Components/testSelectionModal.tsx";
+import type {Test} from "../Types/test.ts"
+import { RobotOutlined, ExperimentOutlined, LeftOutlined, HistoryOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 
@@ -18,8 +19,7 @@ export default function ControlPanel() {
             <TestSelectionModal
                 open={open}
                 onClose={() => setOpen(false)}
-                initialValues={{ testType: "testPattern1"}}
-                onSubmit={async (values: TestSelectionValues) => {
+                onSubmit={async (values: Test) => {
                     setOpen(false);
                     navigate("/testingpattern1", { state: values });
                 }}
@@ -97,14 +97,14 @@ export default function ControlPanel() {
                                 title="Manual Control"
                                 desc="Direct control of robot movements and actions"
                                 button="Start Manual Control"
-                                path="/controlpanel"
+                                path="/manualcontrol"
                             />
                         </Col>
 
                         <Col xs={24} sm={12} md={8} lg={8} xl={7} xxl={6}>
                             <ModeCard
                                 icon={<ExperimentOutlined />}
-                                title="Start Testing"
+                                title="Start an new Test"
                                 desc="Execute predefined testing sequences with monitoring"
                                 customButton={
                                     <Button
@@ -121,11 +121,11 @@ export default function ControlPanel() {
 
                         <Col xs={24} sm={12} md={8} lg={8} xl={7} xxl={6}>
                             <ModeCard
-                                icon={<ExperimentOutlined />}
+                                icon={<HistoryOutlined />}
                                 title="History"
                                 desc="Review past tests and download reports"
                                 button="View History"
-                                path="/testingpattern2"
+                                path="/history"
                             />
                         </Col>
                     </Row>
