@@ -47,3 +47,10 @@ export async function getAllTestChoices(): Promise<TestChoice[]> {
         test_lab: row.test_lab,
     }));
 }
+
+export async function checkTestChoiceExists(): Promise<boolean> {
+    const query = `SELECT COUNT(*) FROM test_choice`;
+    const result = await pool.query(query);
+    const count = parseInt(result.rows[0].count, 10);
+    return count > 0;
+}
