@@ -7,7 +7,7 @@ import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import SensorInputModal from "../Components/sensorInputModal.tsx";
 import TestChoiceInputModal from "../Components/testChoiceImputModal.tsx";
-import axios from "axios";
+import { api } from "../Components/apiAxios.ts";
 
 const { Header, Content } = Layout;
 const { Title, Text } = Typography;
@@ -38,7 +38,7 @@ export default function ControlPanel() {
 
     const chekcIfSensorExist = async () => {
         try {
-            const response = await axios.get('http://localhost:3000/api/sensors/exists');
+            const response = await api.get('/api/sensors/exists');
             return response.data.exists;
             }
         catch (error) {
@@ -49,7 +49,7 @@ export default function ControlPanel() {
 
     const checkIfTestChoiceExist = async () => {
         try {
-            const response = await axios.get('http://localhost:3000/api/testchoice/exists');
+            const response = await api.get('/api/testchoice/exists');
             return response.data.exists;
             }
         catch (error) {

@@ -1,7 +1,7 @@
 import { Modal, Form, Input, message} from "antd";
 import { useState } from "react";
 import type {TestChoice} from "../Types/testChoice.ts";
-import axios from "axios";
+import { api } from "./apiAxios.ts";
 
 const FORM_ID = "test-choice-input-modal-form";
 
@@ -20,7 +20,7 @@ export default function TestChoiceInputModal({ open, onClose, onSubmit }: Props)
         try {
             setSubmitting(true);
 
-            await axios.post("http://localhost:3000/api/testchoice", {
+            await api.post("/api/testchoice", {
                 test_name: values.test_name,
                 test_standard: values.test_standard,
                 test_method: values.test_method,

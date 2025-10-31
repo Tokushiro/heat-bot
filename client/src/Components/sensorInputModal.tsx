@@ -1,6 +1,6 @@
 import { Modal, Form, Input, message } from "antd";
 import { useState } from "react";
-import axios from "axios";
+import { api } from "./apiAxios.ts";
 
 export type SensorInputValues = {
     sensorid: number | null;
@@ -36,7 +36,7 @@ export default function SensorInputModal({ open, onClose, onSubmit }: Props) {
                     : values.mountingheight;
 
 
-            await axios.post("http://localhost:3000/api/sensors", {
+            await api.post("/api/sensors", {
                 sensor_name: values.name,
                 manufacturer: values.manufacturer,
                 product_reference: values.productref || null,
