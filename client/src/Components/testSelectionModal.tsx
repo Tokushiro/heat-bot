@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Modal, Form, Input,  Select, message, Spin } from "antd";
 import type { FormInstance } from "antd";
 import type { SelectProps } from "antd";
@@ -8,12 +8,7 @@ import axios from "axios";
 import type { Sensor } from "../Types/sensor.ts";
 import type { TestChoice } from "../Types/testChoice.ts";
 import type {Test} from "../Types/test.ts"
-
-
-export type TestSelectionValues = {
-    customTestName: string;
-    sensors: number;
-};
+import { api } from "./apiAxios.ts";
 
 type Props = {
     open: boolean;
@@ -35,24 +30,22 @@ export default function TestSelectionModal({
     const [form] = Form.useForm<Test>();
     const [submitting, setSubmitting] = useState(false);
 
-    const [options, setOptions] = useState<SelectProps["options"]>([]);
-    const [loadingOptions, setLoadingOptions] = useState(false);
+    const [sensorOptions, setSensorOptions] = useState<SelectProps["options"]>([]);
     const [choiceOptions, setChoiceOptions] = useState<SelectProps["options"]>([]);
+    const [loadingOptions, setLoadingOptions] = useState(false);
 
     const [openSensor, setOpenSensor] = useState(false);
     const [openTestChoice, setOpenTestChoice] = useState(false);
 
-    const baseURL = useMemo(() => "http://localhost:3000", []);
-
     const fetchSensors = useCallback(async (signal?: AbortSignal) => {
         try {
             setLoadingOptions(true);
-            const res = await axios.get<Sensor[]>(`${baseURL}/api/sensors`, { signal });
+            const res = await api.get<Sensor[]>("/api/sensors", { signal });
             const opts: NonNullable<SelectProps["options"]> = res.data.map((s) => ({
                 value: Number(s.sensor_id),
                 label: s.sensor_name,
             }));
-            setOptions(opts);
+            setSensorOptions(opts);
         } catch (err: unknown) {
             if (axios.isCancel(err)) return;
             console.error("Error fetching sensors:", err);
@@ -60,25 +53,26 @@ export default function TestSelectionModal({
         } finally {
             setLoadingOptions(false);
         }
-    }, [baseURL]);
+    }, []);
 
     const fetchTests = useCallback(async (signal?: AbortSignal) => {
         try {
             setLoadingOptions(true);
-            const res = await axios.get<TestChoice[]>(`${baseURL}/api/testchoice`, { signal });
-            const opts: NonNullable<SelectProps["options"]> = res.data.map((s) => ({
-                value: Number(s.test_id),
-                label: `${s.test_name} - ${s.test_standard} - ${s.test_method} - ${s.test_lab}`,
+            const res = await api.get<TestChoice[]>("/api/testchoice", { signal });
+            const opts: NonNullable<SelectProps["options"]> = res.data.map((t) => ({
+                value: Number(t.test_id),
+                label: `${t.test_name} - ${t.test_standard} - ${t.test_method} - ${t.test_lab}`,
             }));
             setChoiceOptions(opts);
         } catch (err: unknown) {
             if (axios.isCancel(err)) return;
+            // eslint-disable-next-line no-console
             console.error("Error fetching tests:", err);
             message.error("Failed to load tests.");
         } finally {
             setLoadingOptions(false);
         }
-    }, [baseURL]);
+    }, []); // <-- removed stray baseURL dependency
 
     useEffect(() => {
         if (!open) return;
@@ -90,26 +84,33 @@ export default function TestSelectionModal({
 
     const handleFinish = async (values: Test) => {
         try {
-            const time = new Date(Date.now()+(1000*60*(-(new Date()).getTimezoneOffset()))).toISOString().replace('T',' ').replace('Z','');
             setSubmitting(true);
-            await axios.post(`${baseURL}/api/test`, {
+            // ISO local (server expects 'YYYY-MM-DD HH:mm:ss' style)
+            const time = new Date(
+                Date.now() + 1000 * 60 * -(new Date().getTimezoneOffset())
+            )
+                .toISOString()
+                .replace("T", " ")
+                .replace("Z", "");
+
+            await api.post("/api/test", {
                 test_name: values.test_name,
-                test_choice: values.test_choice,
-                sensor_id: values.sensor_id,
-                test_date: time
-            })
+                test_choice: values.test_choice, // number
+                sensor_id: values.sensor_id, // number
+                test_date: time,
+            });
+
             await onSubmit(values, form);
-        }
-        catch (err: any) {
+            message.success("Test created");
+            onClose();
+            form.resetFields();
+        } catch (err) {
+            // eslint-disable-next-line no-console
             console.error(err);
-        }
-        finally {
+            message.error("Failed to create test.");
+        } finally {
             setSubmitting(false);
         }
-    };
-
-    const handleAfterClose = () => {
-        form.resetFields();
     };
 
     return (
@@ -135,7 +136,7 @@ export default function TestSelectionModal({
                 open={open}
                 title={title}
                 onCancel={onClose}
-                afterClose={handleAfterClose}
+                afterClose={() => form.resetFields()}
                 okText="Submit"
                 cancelText="Cancel"
                 confirmLoading={submitting}
@@ -163,10 +164,12 @@ export default function TestSelectionModal({
                         rules={[{ required: true, message: "Please select one test" }]}
                     >
                         <Select
-                            placeholder="Select tests to include"
+                            placeholder="Select test"
                             options={choiceOptions}
                             loading={loadingOptions}
                             notFoundContent={loadingOptions ? <Spin size="small" /> : null}
+                            showSearch
+                            optionFilterProp="label"
                             dropdownRender={(menu) => (
                                 <>
                                     {menu}
@@ -196,10 +199,12 @@ export default function TestSelectionModal({
                         rules={[{ required: true, message: "Please select at least one sensor!" }]}
                     >
                         <Select
-                            placeholder="Select sensors to include"
-                            options={options}
+                            placeholder="Select sensor"
+                            options={sensorOptions}
                             loading={loadingOptions}
                             notFoundContent={loadingOptions ? <Spin size="small" /> : null}
+                            showSearch
+                            optionFilterProp="label"
                             dropdownRender={(menu) => (
                                 <>
                                     {menu}

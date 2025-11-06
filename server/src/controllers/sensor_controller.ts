@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { insertSensor, getAllSensors } from "../services/sensor_service";
+import { insertSensor, getAllSensors, checkSensorsExist } from "../services/sensor_service";
 
 export async function createSensor(req: Request, res: Response) {
     await insertSensor(req.body);
@@ -10,4 +10,9 @@ export async function createSensor(req: Request, res: Response) {
 export async function listSensors(_req: Request, res: Response) {
     const sensors = await getAllSensors();
     return res.status(200).json(sensors);
+}
+
+export async function checkSensorExists(req: Request, res: Response) {
+    const exists = await checkSensorsExist();
+    return res.status(200).json({ exists });
 }

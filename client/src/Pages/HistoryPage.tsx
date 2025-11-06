@@ -2,9 +2,9 @@ import { useNavigate } from "react-router-dom";
 import { Layout, Typography, Button, Space, Tag, Empty } from "antd";
 import { LeftOutlined } from "@ant-design/icons";
 import TestCard, { type TestDB } from "../Components/testCard.tsx";
-import { useEffect, useMemo, useState } from "react";
-import axios from "axios";
+import { useEffect, useState } from "react";
 import type {Test} from "../Types/test.ts";
+import { api } from "../Components/apiAxios.ts";
 
 const { Header, Content } = Layout;
 const { Text, Title } = Typography;
@@ -12,7 +12,7 @@ const { Text, Title } = Typography;
 
 export default function HistoryPage() {
     const navigate = useNavigate();
-    const baseURL = useMemo(() => "http://localhost:3000", []);
+    //const baseURL = useMemo(() => "http://localhost:3000", []);
 
     const [items, setItems] = useState<TestDB[]>();
 
@@ -26,7 +26,7 @@ export default function HistoryPage() {
 
     const fetchTests = async () => {
         try {
-            const res = await axios.get<Test[]>(`${baseURL}/api/test`);
+            const res = await api.get<Test[]>(`/api/test`);
             const opts: TestDB[] = res.data.map((s) => ({
                 test_id: s.test_id,
                 test_name: s.test_name,

@@ -63,3 +63,10 @@ export async function getAllSensors(): Promise<Sensor[]> {
         notes: row.note,
     }));
 }
+
+export async function checkSensorsExist(): Promise<boolean> {
+    const query = `SELECT COUNT(*) FROM sensor`;
+    const result = await pool.query(query);
+    const count = parseInt(result.rows[0].count, 10);
+    return count > 0;
+}
