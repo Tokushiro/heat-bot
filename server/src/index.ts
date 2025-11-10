@@ -3,6 +3,7 @@ import cors from "cors";
 import sensorsRouter from "./routes/sensor_routes";
 import testChoiceRouter from "./routes/test_choice_rotues";
 import testRouter from "./routes/test_routes";
+import serialRouter from "./routes/serial_manager_routes";
 import path from 'path';
 import dotenv from 'dotenv';
 
@@ -30,6 +31,7 @@ app.get("/api/health", (_req, res) => res.json({ ok: true }));
 app.use("/api/sensors", sensorsRouter);
 app.use("/api/testchoice", testChoiceRouter);
 app.use("/api/test", testRouter);
+app.use("/api/serial", serialRouter);
 
 const PORT = Number(process.env.SERVER_PORT ?? 3000);
 // Bind to 0.0.0.0 so other devices can reach it
