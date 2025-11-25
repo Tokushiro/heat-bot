@@ -93,6 +93,7 @@ This will start:
 - PostgreSQL database
 - Node.js API backend
 - React frontend
+- Sensor gateway
 
 You can now visit the system in your browser (usually http://localhost:3000 or the port defined in docker-compose).
 
