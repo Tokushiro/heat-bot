@@ -132,7 +132,7 @@ source .venv/bin/activate
 Install Python dependencies:
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt.txt
 ```
 
 ---
@@ -181,7 +181,7 @@ docker compose up --build
 Update Python dependencies:
 
 ```bash
-pip install --upgrade -r requirements.txt
+pip install --upgrade -r requirements.txt.txt
 ```
 
 ---
