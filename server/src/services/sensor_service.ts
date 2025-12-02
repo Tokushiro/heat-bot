@@ -1,5 +1,6 @@
 import pool from "../db_conn";
 import type { Sensor } from "../models/sensor";
+import bleEventBus, { DetectionEvent } from "./bleEventBus";
 
 export async function insertSensor(sensor: Sensor): Promise<void> {
     const {
@@ -69,4 +70,31 @@ export async function checkSensorsExist(): Promise<boolean> {
     const result = await pool.query(query);
     const count = parseInt(result.rows[0].count, 10);
     return count > 0;
+}
+
+
+export async function processBleDetectionEvent(payload: any): Promise<void> {
+    const { detected, timestamp, raw } = payload ?? {};
+
+    if (typeof detected !== "boolean") {
+        throw new Error("Invalid payload: 'detected' must be a boolean.");
+    }
+
+    if (!Array.isArray(raw)) {
+        throw new Error("Invalid payload: 'raw' must be an array.");
+    }
+
+    const event: DetectionEvent = {
+        detected,
+        timestamp:
+            typeof timestamp === "string"
+                ? timestamp
+                : new Date().toISOString(),
+        raw,
+    };
+
+    // Notify the rest of the system
+    bleEventBus.emit("detection", event);
+
+
 }
