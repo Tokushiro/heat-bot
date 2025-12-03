@@ -373,8 +373,8 @@ const TestingPageEnhanced: React.FC = () => {
                             </Space>
 
                             <div style={{ marginTop: 16 }}>
-                                <Tag color={isConnected ? "green" : "red"} icon={<WifiOutlined />}>
-                                    {isConnected ? "Connected" : "Disconnected"}
+                                <Tag color={socketConnected ? "green" : "red"} icon={<WifiOutlined />}>
+                                    {socketConnected ? "Connected" : "Disconnected"}
                                 </Tag>
                                 {testRunning && <Tag color="blue">RUNNING</Tag>}
                             </div>
