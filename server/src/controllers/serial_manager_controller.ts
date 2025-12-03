@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { SerialManager } from "../services/serial_mannager_service";
+import { SerialManager } from "../services/SerialManager";
 
 export async function connectSerial(req: Request, res: Response) {
     const { path, baudRate } = req.body || {};

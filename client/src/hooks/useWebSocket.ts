@@ -1,138 +1,104 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { io, Socket } from "socket.io-client";
 
-export interface WebSocketMessage {
-    type: string;
-    data: any;
+export interface WebSocketEvent {
+    event: string;
+    payload: any;
     timestamp: string;
 }
 
 export interface UseWebSocketOptions {
-    url: string;
-    onMessage?: (message: WebSocketMessage) => void;
+    url?: string;
+    path?: string;
+    onEvent?: (message: WebSocketEvent) => void;
     onConnect?: () => void;
     onDisconnect?: () => void;
-    onError?: (error: Event) => void;
+    onError?: (error: Error) => void;
     autoReconnect?: boolean;
-    reconnectInterval?: number;
+}
+
+function deriveDefaultUrl(): string {
+    const protocol = window.location.protocol === "https:" ? "https" : "http";
+    const host = import.meta.env.VITE_SERVER_IP || window.location.hostname;
+    const port = import.meta.env.VITE_SERVER_PORT || "3000";
+    return `${protocol}://${host}:${port}`;
 }
 
 export function useWebSocket(options: UseWebSocketOptions) {
     const {
         url,
-        onMessage,
+        path = "/socket.io",
+        onEvent,
         onConnect,
         onDisconnect,
         onError,
         autoReconnect = true,
-        reconnectInterval = 3000
     } = options;
 
-    const wsRef = useRef<WebSocket | null>(null);
+    const socketRef = useRef<Socket | null>(null);
     const [isConnected, setIsConnected] = useState(false);
-    const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null);
-    const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
-    const shouldReconnect = useRef(true);
+    const [lastEvent, setLastEvent] = useState<WebSocketEvent | null>(null);
 
     const connect = useCallback(() => {
-        try {
-            const ws = new WebSocket(url);
+        const targetUrl = url || deriveDefaultUrl();
 
-            ws.onopen = () => {
-                console.log("[WebSocket] Connected");
-                setIsConnected(true);
-                if (onConnect) onConnect();
+        const socket = io(targetUrl, {
+            path,
+            autoConnect: true,
+            transports: ["websocket"],
+            reconnection: autoReconnect,
+        });
+
+        socket.on("connect", () => {
+            setIsConnected(true);
+            onConnect?.();
+        });
+
+        socket.on("disconnect", () => {
+            setIsConnected(false);
+            onDisconnect?.();
+        });
+
+        socket.on("connect_error", (err) => {
+            onError?.(err);
+        });
+
+        socket.onAny((event, payload) => {
+            const message: WebSocketEvent = {
+                event,
+                payload,
+                timestamp: new Date().toISOString(),
             };
+            setLastEvent(message);
+            onEvent?.(message);
+        });
 
-            ws.onmessage = (event) => {
-                try {
-                    const message: WebSocketMessage = JSON.parse(event.data);
-                    setLastMessage(message);
-                    if (onMessage) onMessage(message);
-                } catch (error) {
-                    console.error("[WebSocket] Error parsing message:", error);
-                }
-            };
-
-            ws.onclose = () => {
-                console.log("[WebSocket] Disconnected");
-                setIsConnected(false);
-                wsRef.current = null;
-                if (onDisconnect) onDisconnect();
-
-                // Auto-reconnect if enabled
-                if (autoReconnect && shouldReconnect.current) {
-                    console.log(`[WebSocket] Reconnecting in ${reconnectInterval}ms...`);
-                    reconnectTimeoutRef.current = setTimeout(() => {
-                        connect();
-                    }, reconnectInterval);
-                }
-            };
-
-            ws.onerror = (error) => {
-                console.error("[WebSocket] Error:", error);
-                if (onError) onError(error);
-            };
-
-            wsRef.current = ws;
-        } catch (error) {
-            console.error("[WebSocket] Connection failed:", error);
-        }
-    }, [url, onConnect, onMessage, onDisconnect, onError, autoReconnect, reconnectInterval]);
+        socketRef.current = socket;
+    }, [autoReconnect, onConnect, onDisconnect, onError, onEvent, path, url]);
 
     const disconnect = useCallback(() => {
-        shouldReconnect.current = false;
-        if (reconnectTimeoutRef.current) {
-            clearTimeout(reconnectTimeoutRef.current);
-        }
-        if (wsRef.current) {
-            wsRef.current.close();
-            wsRef.current = null;
-        }
+        socketRef.current?.disconnect();
+        socketRef.current = null;
         setIsConnected(false);
     }, []);
 
-    const send = useCallback((data: any) => {
-        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify(data));
-        } else {
-            console.warn("[WebSocket] Cannot send message - not connected");
-        }
+    const emit = useCallback((event: string, payload?: any) => {
+        socketRef.current?.emit(event, payload);
     }, []);
 
-    const subscribe = useCallback((channels: string[]) => {
-        send({ type: "subscribe", data: { channels } });
-    }, [send]);
-
-    const unsubscribe = useCallback((channels: string[]) => {
-        send({ type: "unsubscribe", data: { channels } });
-    }, [send]);
-
-    // Connect on mount
     useEffect(() => {
-        shouldReconnect.current = true;
         connect();
-
-        // Cleanup on unmount
         return () => {
-            shouldReconnect.current = false;
-            if (reconnectTimeoutRef.current) {
-                clearTimeout(reconnectTimeoutRef.current);
-            }
-            if (wsRef.current) {
-                wsRef.current.close();
-                wsRef.current = null;
-            }
+            disconnect();
         };
-    }, [connect]);
+    }, [connect, disconnect]);
 
     return {
         isConnected,
-        lastMessage,
-        send,
-        subscribe,
-        unsubscribe,
+        lastEvent,
+        emit,
         disconnect,
-        reconnect: connect
+        reconnect: connect,
     };
 }
 
