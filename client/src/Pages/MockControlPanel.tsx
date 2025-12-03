@@ -7,7 +7,7 @@ import {
     RadarChartOutlined,
     BugOutlined
 } from "@ant-design/icons";
-import axios from "axios";
+import { api } from "../Components/apiAxios";
 
 /**
  * Mock Control Panel
@@ -32,7 +32,7 @@ const MockControlPanel: React.FC = () => {
 
     const checkMockStatus = async () => {
         try {
-            const response = await axios.get('http://localhost:3000/api/mock/status');
+            const response = await api.get('/api/mock/status');
             setRobotConnected(response.data.robot.connected);
             setSensorConnected(response.data.sensor.connected);
             setBatteryLevel(response.data.robot.battery);
@@ -45,7 +45,7 @@ const MockControlPanel: React.FC = () => {
     // Robot Controls
     const handleConnectRobot = async () => {
         try {
-            await axios.post('http://localhost:3000/api/mock/robot/connect');
+            await api.post('/api/mock/robot/connect');
             setRobotConnected(true);
             message.success('Robot connected (mock)');
         } catch (error) {
@@ -55,7 +55,7 @@ const MockControlPanel: React.FC = () => {
 
     const handleLowBattery = async () => {
         try {
-            await axios.post('http://localhost:3000/api/mock/robot/low-battery');
+            await api.post('/api/mock/robot/low-battery');
             setBatteryLevel(15);
             message.warning('Battery low simulated!');
         } catch (error) {
@@ -65,7 +65,7 @@ const MockControlPanel: React.FC = () => {
 
     const handleRechargeBattery = async () => {
         try {
-            await axios.post('http://localhost:3000/api/mock/robot/recharge');
+            await api.post('/api/mock/robot/recharge');
             setBatteryLevel(100);
             message.success('Battery recharged to 100%');
         } catch (error) {
@@ -76,7 +76,7 @@ const MockControlPanel: React.FC = () => {
     const handleSetBattery = async (value: number | null) => {
         if (value === null) return;
         try {
-            await axios.post('http://localhost:3000/api/mock/robot/set-battery', { level: value });
+            await api.post('/api/mock/robot/set-battery', { level: value });
             setBatteryLevel(value);
             message.info(`Battery set to ${value}%`);
         } catch (error) {
@@ -86,7 +86,7 @@ const MockControlPanel: React.FC = () => {
 
     const handleConnectionLost = async () => {
         try {
-            await axios.post('http://localhost:3000/api/mock/robot/disconnect');
+            await api.post('/api/mock/robot/disconnect');
             setRobotConnected(false);
             message.error('Connection lost (simulated)');
         } catch (error) {
@@ -96,7 +96,7 @@ const MockControlPanel: React.FC = () => {
 
     const handleMovementFailed = async () => {
         try {
-            await axios.post('http://localhost:3000/api/mock/robot/movement-failed');
+            await api.post('/api/mock/robot/movement-failed');
             message.warning('Movement failed (simulated)');
         } catch (error) {
             message.error('Failed to simulate movement failure');
@@ -106,7 +106,7 @@ const MockControlPanel: React.FC = () => {
     // Sensor Controls
     const handleConnectSensor = async () => {
         try {
-            await axios.post('http://localhost:3000/api/mock/sensor/connect');
+            await api.post('/api/mock/sensor/connect');
             setSensorConnected(true);
             message.success('Sensor connected (mock)');
         } catch (error) {
@@ -116,7 +116,7 @@ const MockControlPanel: React.FC = () => {
 
     const handleForceDetect = async () => {
         try {
-            await axios.post('http://localhost:3000/api/mock/sensor/force-detect');
+            await api.post('/api/mock/sensor/force-detect');
             message.success('Detection triggered!');
         } catch (error) {
             message.error('Failed to trigger detection');
@@ -125,7 +125,7 @@ const MockControlPanel: React.FC = () => {
 
     const handleForceNoDetect = async () => {
         try {
-            await axios.post('http://localhost:3000/api/mock/sensor/force-no-detect');
+            await api.post('/api/mock/sensor/force-no-detect');
             message.warning('No detection triggered');
         } catch (error) {
             message.error('Failed to trigger no detection');
@@ -134,7 +134,7 @@ const MockControlPanel: React.FC = () => {
 
     const handleSetDetectionRate = async (value: number) => {
         try {
-            await axios.post('http://localhost:3000/api/mock/sensor/set-detection-rate', {
+            await api.post('/api/mock/sensor/set-detection-rate', {
                 probability: value / 100
             });
             setDetectionRate(value);
@@ -147,7 +147,7 @@ const MockControlPanel: React.FC = () => {
     const handleSetDetectionDelay = async (value: number | null) => {
         if (value === null) return;
         try {
-            await axios.post('http://localhost:3000/api/mock/sensor/set-detection-delay', {
+            await api.post('/api/mock/sensor/set-detection-delay', {
                 delayMs: value
             });
             setDetectionDelay(value);
@@ -159,7 +159,7 @@ const MockControlPanel: React.FC = () => {
 
     const handleToggleAutoDetect = async (checked: boolean) => {
         try {
-            await axios.post('http://localhost:3000/api/mock/sensor/set-auto-detect', {
+            await api.post('/api/mock/sensor/set-auto-detect', {
                 enabled: checked
             });
             setAutoDetect(checked);
@@ -171,7 +171,7 @@ const MockControlPanel: React.FC = () => {
 
     const handleSensorMalfunction = async () => {
         try {
-            await axios.post('http://localhost:3000/api/mock/sensor/malfunction');
+            await api.post('/api/mock/sensor/malfunction');
             setSensorConnected(false);
             message.error('Sensor malfunction (simulated)');
         } catch (error) {
