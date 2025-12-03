@@ -7,7 +7,7 @@ export type TestCardProps = {
     test: TestDB;
     onContinue: () => void;
     onDelete: () => void;
-    isDeleting?: boolean; // NEW: Loading state for delete
+    isDeleting?: boolean;
 };
 
 function formatDate(d: Date) {
