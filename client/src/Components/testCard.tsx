@@ -1,13 +1,13 @@
 import { Card, Row, Col, Typography, Tag, Space, Button, Popconfirm } from "antd";
 import type { Test } from "../Types/test.ts";
 
-// Remove the old TestDB type definition since Test now includes status
 export type TestDB = Test;
 
 export type TestCardProps = {
     test: TestDB;
     onContinue: () => void;
     onDelete: () => void;
+    isDeleting?: boolean; // NEW: Loading state for delete
 };
 
 function formatDate(d: Date) {
@@ -19,15 +19,13 @@ function formatDate(d: Date) {
     }
 }
 
-export default function TestCard({ test, onContinue, onDelete }: TestCardProps) {
-    // FIX: Use the actual status values from the database
+export default function TestCard({ test, onContinue, onDelete, isDeleting = false }: TestCardProps) {
     const status = test.status ?? 'PLANNED';
     const isComplete = status === 'COMPLETED';
     const isInProgress = status === 'IN_PROGRESS';
     //const isError = status === 'ERROR';
     const isPaused = status === 'PAUSED';
 
-    // Determine tag color based on status
     const getStatusColor = () => {
         switch (status) {
             case 'COMPLETED':
@@ -44,7 +42,6 @@ export default function TestCard({ test, onContinue, onDelete }: TestCardProps) 
         }
     };
 
-    // Format status for display
     const getStatusDisplay = () => {
         switch (status) {
             case 'IN_PROGRESS':
@@ -65,7 +62,13 @@ export default function TestCard({ test, onContinue, onDelete }: TestCardProps) 
         <Card
             hoverable
             size="small"
-            style={{ width: "100%", borderRadius: 16, boxShadow: "0 8px 24px rgba(0,0,0,0.06)" }}
+            style={{
+                width: "100%",
+                borderRadius: 16,
+                boxShadow: "0 8px 24px rgba(0,0,0,0.06)",
+                opacity: isDeleting ? 0.6 : 1,
+                transition: "opacity 0.3s"
+            }}
             bodyStyle={{ padding: 20 }}
         >
             <Row align="middle" gutter={[16, 12]}>
@@ -91,8 +94,7 @@ export default function TestCard({ test, onContinue, onDelete }: TestCardProps) 
                     </Space>
                 </Col>
 
-
-                {/* Right: status + actions (right-aligned, wraps nicely on small screens) */}
+                {/* Right: status + actions */}
                 <Col xs={24} md={12}>
                     <div
                         style={{
@@ -116,34 +118,40 @@ export default function TestCard({ test, onContinue, onDelete }: TestCardProps) 
                             {getStatusDisplay()}
                         </Tag>
 
-
                         <Button
                             type="primary"
                             onClick={onContinue}
                             shape="round"
-                            disabled={isComplete} // Optionally disable if completed
+                            disabled={isDeleting}
                         >
                             {isComplete ? 'View' : isInProgress || isPaused ? 'Resume' : 'Start'}
                         </Button>
 
-
                         <Button
-                            onClick={() => console.log("CSV Download")}
+                            onClick={() => console.log("CSV Download", test.test_id)}
                             shape="round"
-                            disabled={!isComplete} // Only enable CSV for completed tests
+                            disabled={!isComplete || isDeleting}
                         >
                             CSV
                         </Button>
 
-
                         <Popconfirm
                             title="Delete this test?"
-                            description="This action cannot be undone."
+                            description="This will permanently delete the test and all associated data. This action cannot be undone."
                             okText="Delete"
-                            okButtonProps={{ danger: true }}
+                            cancelText="Cancel"
+                            okButtonProps={{ danger: true, loading: isDeleting }}
                             onConfirm={onDelete}
+                            disabled={isDeleting}
                         >
-                            <Button danger shape="round">Delete</Button>
+                            <Button
+                                danger
+                                shape="round"
+                                loading={isDeleting}
+                                disabled={isDeleting}
+                            >
+                                {isDeleting ? 'Deleting...' : 'Delete'}
+                            </Button>
                         </Popconfirm>
                     </div>
                 </Col>

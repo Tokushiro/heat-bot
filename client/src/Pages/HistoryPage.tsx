@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { Layout, Typography, Button, Space, Tag, Empty } from "antd";
+import { Layout, Typography, Button, Space, Tag, Empty, message } from "antd";
 import { LeftOutlined } from "@ant-design/icons";
 import TestCard, { type TestDB } from "../Components/testCard.tsx";
 import { useEffect, useState } from "react";
@@ -13,29 +13,17 @@ const { Text, Title } = Typography;
 export default function HistoryPage() {
     const navigate = useNavigate();
 
-    const [items, setItems] = useState<TestDB[]>();
-
-    // FIX: Handle nullable test_id properly
-    const handleDelete = (testId: number | null | undefined) => {
-        if (!testId) {
-            console.warn("Cannot delete test with null/undefined ID");
-            return;
-        }
-
-        // TODO: Implement actual delete logic
-        console.log("Delete test:", testId);
-
-        // Example delete API call:
-        // await api.delete(`/api/test/${testId}`);
-        // await fetchTests(); // Refresh list
-    };
+    const [items, setItems] = useState<TestDB[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [deleting, setDeleting] = useState<number | null>(null);
 
     useEffect(() => {
         fetchTests();
-    }, []); // FIX: Add dependency array to prevent infinite loop
+    }, []);
 
     const fetchTests = async () => {
         try {
+            setLoading(true);
             const res = await api.get<Test[]>(`/api/test`);
             const opts: TestDB[] = res.data.map((s) => ({
                 test_id: s.test_id,
@@ -43,13 +31,38 @@ export default function HistoryPage() {
                 test_choice: s.test_choice,
                 sensor_id: s.sensor_id,
                 test_date: new Date(s.test_date),
-                status: s.status ?? 'PLANNED', // Use actual status from DB
+                status: s.status ?? 'PLANNED',
                 started_at: s.started_at,
                 finished_at: s.finished_at,
             }));
             setItems(opts);
         } catch (err: unknown) {
             console.error("Error fetching tests:", err);
+            message.error("Failed to load test history");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDelete = async (testId: number | null | undefined) => {
+        if (!testId) {
+            message.error("Cannot delete test with invalid ID");
+            return;
+        }
+
+        try {
+            setDeleting(testId);
+            await api.delete(`/api/test/${testId}`);
+            message.success("Test deleted successfully");
+
+            setItems(prev => prev.filter(item => item.test_id !== testId));
+        } catch (err: any) {
+            console.error("Error deleting test:", err);
+            message.error(
+                err?.response?.data?.error ?? "Failed to delete test. Please try again."
+            );
+        } finally {
+            setDeleting(null);
         }
     };
 
@@ -100,7 +113,6 @@ export default function HistoryPage() {
                 <div style={{ flex: 1 }} />
             </Header>
 
-            {/* Scrollable content area */}
             <Content
                 style={{
                     height: "calc(100vh - 56px)",
@@ -112,7 +124,11 @@ export default function HistoryPage() {
                     Test History
                 </Title>
                 <div style={{ maxWidth: 960, margin: "0 auto", padding: 16 }}>
-                    {items == null ? (
+                    {loading ? (
+                        <div style={{ textAlign: "center", padding: "40px 0" }}>
+                            <Typography.Text type="secondary">Loading tests...</Typography.Text>
+                        </div>
+                    ) : items.length === 0 ? (
                         <Empty description="No history yet" />
                     ) : (
                         <Space direction="vertical" size={12} style={{ width: "100%" }}>
@@ -122,6 +138,7 @@ export default function HistoryPage() {
                                     test={item}
                                     onContinue={() => navigate("/testingpattern1", { state: item })}
                                     onDelete={() => handleDelete(item.test_id)}
+                                    isDeleting={deleting === item.test_id}
                                 />
                             ))}
                         </Space>

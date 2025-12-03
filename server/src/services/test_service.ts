@@ -7,7 +7,7 @@ export async function insertTest(test: Test): Promise<void> {
         test_choice,
         sensor_id,
         test_date,
-        status = 'PLANNED', // default value
+        status = 'PLANNED',
     } = test;
 
     const query = `
@@ -64,12 +64,53 @@ export async function updateTestStatus(
     finished_at?: Date
 ): Promise<void> {
     const query = `
-    UPDATE test
-    SET status = $1,
-        started_at = COALESCE($2, started_at),
-        finished_at = COALESCE($3, finished_at)
-    WHERE test_id = $4
-  `;
+        UPDATE test
+        SET status = $1,
+            started_at = COALESCE($2, started_at),
+            finished_at = COALESCE($3, finished_at)
+        WHERE test_id = $4
+    `;
 
     await pool.query(query, [status, started_at, finished_at, test_id]);
+}
+
+
+export async function deleteTest(test_id: number): Promise<void> {
+    const query = `DELETE FROM test WHERE test_id = $1`;
+    await pool.query(query, [test_id]);
+}
+
+export async function getTestById(test_id: number): Promise<Test | null> {
+    const query = `
+    SELECT
+      test_id,
+      test_name,
+      test_choice,
+      sensor_id,
+      test_date,
+      status,
+      started_at,
+      finished_at
+    FROM
+      test
+    WHERE test_id = $1
+  `;
+
+    const result = await pool.query(query, [test_id]);
+
+    if (result.rows.length === 0) {
+        return null;
+    }
+
+    const row = result.rows[0];
+    return {
+        test_id: row.test_id,
+        test_name: row.test_name,
+        test_choice: row.test_choice,
+        sensor_id: row.sensor_id,
+        test_date: row.test_date,
+        status: row.status,
+        started_at: row.started_at,
+        finished_at: row.finished_at,
+    };
 }
