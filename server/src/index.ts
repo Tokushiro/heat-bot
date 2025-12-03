@@ -48,5 +48,5 @@ const PORT = Number(process.env.SERVER_PORT ?? 3000);
 // Bind to 0.0.0.0 so other devices can reach it
 httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(`🚀 API listening on http://0.0.0.0:${PORT}`);
-    console.log(`🔌 WebSocket available at ws://0.0.0.0:${PORT}/ws`);
+    console.log(`🔌 SSE stream available at http://0.0.0.0:${PORT}/ws`);
 });

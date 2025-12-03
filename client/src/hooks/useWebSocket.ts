@@ -80,7 +80,7 @@ export function useWebSocket(options: UseWebSocketOptions) {
         socketRef.current?.disconnect();
         socketRef.current = null;
         setIsConnected(false);
-    }, []);
+    }, [onDisconnect]);
 
     const emit = useCallback((event: string, payload?: any) => {
         socketRef.current?.emit(event, payload);
