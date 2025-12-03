@@ -1,4 +1,4 @@
-import { SerialManager } from "./serial_mannager_service";
+import { SerialManager } from "./SerialManager";
 import { EventEmitter } from "events";
 
 /**

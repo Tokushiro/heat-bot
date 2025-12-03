@@ -1,3 +1,4 @@
+import "./config/env";
 import express from "express";
 import { createServer } from "http";
 import cors from "cors";
@@ -7,11 +8,8 @@ import testRouter from "./routes/test_routes";
 import serialRouter from "./routes/serial_manager_routes";
 import sensorEventsRouter from "./routes/sensorEvents_routes";
 import testExecutionRouter from "./routes/test_execution_routes";
-import path from 'path';
-import dotenv from 'dotenv';
-import WebSocketService from "./services/websocket_service";
+import websocketService from "./services/websocket_service";
 
-dotenv.config({ path: path.resolve(__dirname, "..", "..", ".env") });
 const serverIP = process.env.SERVER_IP;
 console.log("Loaded SERVER_IP:", process.env.SERVER_IP);
 
@@ -43,7 +41,7 @@ app.use("/api", sensorEventsRouter);
 app.use("/api/test-execution", testExecutionRouter);
 
 // Initialize WebSocket server
-WebSocketService.instance.initialize(httpServer);
+websocketService.initialize(httpServer);
 
 const PORT = Number(process.env.SERVER_PORT ?? 3000);
 

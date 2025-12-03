@@ -27,7 +27,10 @@ interface TestDetails {
     latestCheckpoint?: any;
 }
 
-interface TestWithDetails extends Test {
+interface TestWithDetails extends Omit<Test, "test_id" | "test_choice"> {
+    test_id: number;
+    test_choice: number | { test_name?: string };
+    sensor?: { name?: string };
     status: "completed" | "in_progress" | "pending" | "failed";
     can_resume?: boolean;
     interrupted_at?: string;
@@ -51,15 +54,17 @@ export default function HistoryPageEnhanced() {
         try {
             setLoading(true);
             const res = await api.get<Test[]>(`/api/test`);
-            const testsWithStatus: TestWithDetails[] = res.data.map((t: any) => ({
-                ...t,
-                test_date: new Date(t.test_date),
-                status: t.status || "pending",
-                can_resume: t.can_resume || false,
-                interrupted_at: t.interrupted_at,
-                interruption_reason: t.interruption_reason,
-                last_checkpoint: t.last_checkpoint
-            }));
+            const testsWithStatus: TestWithDetails[] = res.data
+                .filter((t): t is Test & { test_id: number } => typeof t.test_id === "number")
+                .map((t: any) => ({
+                    ...t,
+                    test_date: new Date(t.test_date),
+                    status: t.status || "pending",
+                    can_resume: t.can_resume || false,
+                    interrupted_at: t.interrupted_at,
+                    interruption_reason: t.interruption_reason,
+                    last_checkpoint: t.last_checkpoint
+                }));
             setTests(testsWithStatus);
         } catch (err) {
             console.error("Error fetching tests:", err);
@@ -185,27 +190,6 @@ export default function HistoryPageEnhanced() {
             message.success('CSV downloaded successfully');
         } catch (error: any) {
             message.error(`Failed to download CSV: ${error.message}`);
-        }
-    };
-
-    const handleDownloadStatistics = async (testId: number, testName: string) => {
-        try {
-            const response = await api.get(`/api/test-execution/${testId}/export/statistics`, {
-                responseType: 'blob'
-            });
-
-            const url = window.URL.createObjectURL(new Blob([response.data]));
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', `${testName}_statistics.csv`);
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            window.URL.revokeObjectURL(url);
-
-            message.success('Statistics downloaded successfully');
-        } catch (error: any) {
-            message.error(`Failed to download statistics: ${error.message}`);
         }
     };
 
@@ -356,7 +340,7 @@ export default function HistoryPageEnhanced() {
                                 ]}
                                 pagination={false}
                                 size="small"
-                                rowKey={(record, index) => `radial-${index}`}
+                                rowKey={(_record, index) => `radial-${index}`}
                             />
                         </Panel>
                     )}
@@ -389,7 +373,7 @@ export default function HistoryPageEnhanced() {
                                 ]}
                                 pagination={false}
                                 size="small"
-                                rowKey={(record, index) => `tangential-${index}`}
+                                rowKey={(_record, index) => `tangential-${index}`}
                             />
                         </Panel>
                     )}
@@ -440,14 +424,25 @@ export default function HistoryPageEnhanced() {
             title: "Test Name",
             dataIndex: "test_name",
             key: "test_name",
-            render: (text: string, record: TestWithDetails) => (
-                <div>
-                    <div style={{ fontWeight: 500 }}>{text}</div>
-                    <div style={{ fontSize: 12, color: "#999" }}>
-                        {record.test_choice?.test_name} • {record.sensor?.name}
+            render: (text: string, record: TestWithDetails) => {
+                const choiceName = typeof record.test_choice === "object"
+                    ? record.test_choice?.test_name
+                    : undefined;
+                const sensorName = typeof record.sensor === "object"
+                    ? record.sensor?.name
+                    : undefined;
+
+                return (
+                    <div>
+                        <div style={{ fontWeight: 500 }}>{text}</div>
+                        <div style={{ fontSize: 12, color: "#999" }}>
+                            {choiceName || ""}
+                            {choiceName && sensorName ? " • " : ""}
+                            {sensorName || ""}
+                        </div>
                     </div>
-                </div>
-            )
+                );
+            }
         },
         {
             title: "Status",

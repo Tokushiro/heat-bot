@@ -301,7 +301,7 @@ export class CSVExportService {
     /**
      * Generate summary statistics CSV
      */
-    static async generateSummaryStatisticsCSV(testId: number): string {
+    static async generateSummaryStatisticsCSV(testId: number): Promise<string> {
         const statsQuery = `
             WITH detection_stats AS (
                 SELECT 
