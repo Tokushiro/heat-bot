@@ -13,7 +13,7 @@ import {
     RobotOutlined
 } from "@ant-design/icons";
 import { api } from "../Components/apiAxios";
-import useWebSocket, { type WebSocketEvent } from "../hooks/useWebSocket";
+import useWebSocket, { WebSocketEvent } from "../hooks/useWebSocket";
 
 interface LogEntry {
     id: number;
@@ -52,6 +52,24 @@ const TestingPageEnhanced: React.FC = () => {
 
     const logEndRef = useRef<HTMLDivElement>(null);
     const logIdCounter = useRef(0);
+
+    // WebSocket connection
+    const { isConnected } = useWebSocket({
+        onConnect: () => {
+            addLog("info", "Connected to test monitoring");
+        },
+        onDisconnect: () => {
+            addLog("warning", "Disconnected from test monitoring");
+        },
+        onEvent: handleWebSocketMessage
+    });
+
+    // Auto-start resume if testId and resume flag are present
+    useEffect(() => {
+        if (testId && isResuming) {
+            loadResumeInfo();
+        }
+    }, [testId, isResuming]);
 
     const loadResumeInfo = async () => {
         if (!testId) return;
@@ -174,7 +192,7 @@ const TestingPageEnhanced: React.FC = () => {
     };
 
     // WebSocket connection
-    const { isConnected: socketConnected } = useWebSocket({
+    const { isConnected } = useWebSocket({
         onConnect: () => {
             addLog("info", "Connected to test monitoring");
         },
