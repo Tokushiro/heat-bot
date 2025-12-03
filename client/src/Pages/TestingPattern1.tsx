@@ -12,8 +12,8 @@ import {
     ReloadOutlined,
     RobotOutlined
 } from "@ant-design/icons";
-import axios from "axios";
-import useWebSocket from "../hooks/useWebSocket";
+import { api } from "../Components/apiAxios";
+import useWebSocket, { type WebSocketEvent } from "../hooks/useWebSocket";
 
 interface LogEntry {
     id: number;
@@ -41,7 +41,7 @@ const TestingPageEnhanced: React.FC = () => {
     const testIdParam = searchParams.get('testId');
     const resumeParam = searchParams.get('resume');
 
-    const [testId, setTestId] = useState<number | null>(testIdParam ? parseInt(testIdParam) : null);
+    const testId = testIdParam ? parseInt(testIdParam) : null;
     const [isResuming, setIsResuming] = useState<boolean>(resumeParam === 'true');
     const [testRunning, setTestRunning] = useState(false);
     const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -53,32 +53,11 @@ const TestingPageEnhanced: React.FC = () => {
     const logEndRef = useRef<HTMLDivElement>(null);
     const logIdCounter = useRef(0);
 
-    // WebSocket connection
-    const { isConnected, send } = useWebSocket({
-        url: "ws://localhost:3000/ws",
-        onConnect: () => {
-            addLog("info", "Connected to test monitoring");
-            // Subscribe to relevant channels
-            send({ type: "subscribe", channels: ["test", "robot", "sensor"] });
-        },
-        onDisconnect: () => {
-            addLog("warning", "Disconnected from test monitoring");
-        },
-        onMessage: handleWebSocketMessage
-    });
-
-    // Auto-start resume if testId and resume flag are present
-    useEffect(() => {
-        if (testId && isResuming) {
-            loadResumeInfo();
-        }
-    }, [testId, isResuming]);
-
     const loadResumeInfo = async () => {
         if (!testId) return;
 
         try {
-            const response = await axios.get(`http://localhost:3000/api/test-execution/${testId}/details`);
+            const response = await api.get(`/api/test-execution/${testId}/details`);
             if (response.data.canResume && response.data.latestCheckpoint) {
                 setResumeInfo({
                     checkpoint: response.data.latestCheckpoint,
@@ -103,10 +82,11 @@ const TestingPageEnhanced: React.FC = () => {
         setLogs(prev => [...prev, newLog]);
     };
 
-    const handleWebSocketMessage = (message: any) => {
-        console.log("WebSocket message:", message);
+    const handleWebSocketMessage = (message: WebSocketEvent) => {
+        const payload = message.payload ?? {};
+        const type = payload.type || message.event;
 
-        switch (message.type) {
+        switch (type) {
             case "test:started":
                 setTestRunning(true);
                 addLog("success", "Test execution started");
@@ -115,7 +95,7 @@ const TestingPageEnhanced: React.FC = () => {
             case "test:resumed":
                 setTestRunning(true);
                 setIsResuming(false);
-                addLog("success", `Test resumed from checkpoint: ${message.checkpoint?.phase}`);
+                addLog("success", `Test resumed from checkpoint: ${payload.checkpoint?.phase}`);
                 break;
 
             case "test:completed":
@@ -125,13 +105,13 @@ const TestingPageEnhanced: React.FC = () => {
 
             case "test:failed":
                 setTestRunning(false);
-                addLog("error", `Test failed: ${message.error}`);
+                addLog("error", `Test failed: ${payload.error}`);
                 break;
 
             case "test:interrupted":
                 setTestRunning(false);
-                addLog("warning", `Test interrupted: ${message.reason}`);
-                if (message.canResume) {
+                addLog("warning", `Test interrupted: ${payload.reason}`);
+                if (payload.canResume) {
                     addLog("info", "Test can be resumed from last checkpoint");
                     setIsResuming(true);
                     loadResumeInfo();
@@ -139,23 +119,24 @@ const TestingPageEnhanced: React.FC = () => {
                 break;
 
             case "test:checkpoint_saved":
-                addLog("info", `Checkpoint saved: ${message.phase} (${message.completed} measurements)`);
+                addLog("info", `Checkpoint saved: ${payload.phase} (${payload.completed} measurements)`);
                 break;
 
             case "test:phase_started":
-                addLog("info", `Starting phase: ${message.phase}`);
+                addLog("info", `Starting phase: ${payload.phase}`);
                 break;
 
             case "test:measurement_started":
-                addLog("info", `Measuring at ${message.angle}°, ${message.distance}m (attempt ${message.attempt})`);
+                addLog("info", `Measuring at ${payload.angle}°, ${payload.distance ?? payload.radius}m (attempt ${payload.attempt})`);
                 break;
 
-            case "test:measurement_completed":
-                const detected = message.detected ? "✓ DETECTED" : "✗ NOT DETECTED";
-                const logType = message.detected ? "success" : "warning";
-                addLog(logType, `Measurement complete: ${detected} at ${message.angle}°, ${message.distance}m`);
-                setLastDetection(message.detected);
+            case "test:measurement_completed": {
+                const detectedLabel = payload.detected ? "✓ DETECTED" : "✗ NOT DETECTED";
+                const logType = payload.detected ? "success" : "warning";
+                addLog(logType, `Measurement complete: ${detectedLabel} at ${payload.angle}°, ${payload.distance ?? payload.radius}m`);
+                setLastDetection(payload.detected ?? null);
                 break;
+            }
 
             case "robot:initialized":
                 addLog("success", "Robot initialized successfully");
@@ -166,35 +147,56 @@ const TestingPageEnhanced: React.FC = () => {
                 break;
 
             case "robot:movement_completed":
-                if (message.position) {
-                    setRobotPosition(message.position);
-                    addLog("info", `Robot at position (${message.position.x.toFixed(2)}, ${message.position.y.toFixed(2)})`);
+                if (payload.position) {
+                    setRobotPosition(payload.position);
+                    addLog("info", `Robot at position (${payload.position.x.toFixed(2)}, ${payload.position.y.toFixed(2)})`);
                 }
                 break;
 
+            case "sensor-detection":
             case "sensor:detection":
-                if (message.detected) {
+                if (payload.detected) {
                     addLog("success", "Sensor detected movement!");
                 }
                 break;
 
             case "checkpoint_loaded":
-                addLog("info", `Loaded checkpoint from ${message.checkpoint.current_phase}`);
+                addLog("info", `Loaded checkpoint from ${payload.checkpoint.current_phase}`);
+                break;
+
+            default:
                 break;
         }
 
-        // Update progress if testId matches
-        if (message.testId === testId) {
+        if (payload.testId === testId) {
             fetchProgress();
         }
     };
+
+    // WebSocket connection
+    const { isConnected: socketConnected } = useWebSocket({
+        onConnect: () => {
+            addLog("info", "Connected to test monitoring");
+        },
+        onDisconnect: () => {
+            addLog("warning", "Disconnected from test monitoring");
+        },
+        onEvent: handleWebSocketMessage
+    });
+
+    // Auto-start resume if testId and resume flag are present
+    useEffect(() => {
+        if (testId && isResuming) {
+            loadResumeInfo();
+        }
+    }, [testId, isResuming]);
 
     const fetchProgress = async () => {
         if (!testId) return;
 
         try {
-            const response = await axios.get<TestProgress>(
-                `http://localhost:3000/api/test-execution/${testId}/progress`
+            const response = await api.get<TestProgress>(
+                `/api/test-execution/${testId}/progress`
             );
             setProgress(response.data);
         } catch (error) {
@@ -211,13 +213,13 @@ const TestingPageEnhanced: React.FC = () => {
         try {
             if (isResuming && resumeInfo) {
                 // Resume test
-                await axios.post("http://localhost:3000/api/test-execution/resume", {
+                await api.post("/api/test-execution/resume", {
                     testId
                 });
                 addLog("info", "Resuming test from last checkpoint...");
             } else {
                 // Start new test
-                await axios.post("http://localhost:3000/api/test-execution/start", {
+                await api.post("/api/test-execution/start", {
                     testId
                 });
                 addLog("info", "Starting test execution...");
@@ -230,7 +232,7 @@ const TestingPageEnhanced: React.FC = () => {
 
     const stopTest = async () => {
         try {
-            await axios.post("http://localhost:3000/api/test-execution/stop");
+            await api.post("/api/test-execution/stop");
             addLog("warning", "Test execution stopped by user");
             setTestRunning(false);
         } catch (error: any) {
@@ -353,8 +355,8 @@ const TestingPageEnhanced: React.FC = () => {
                             </Space>
 
                             <div style={{ marginTop: 16 }}>
-                                <Tag color={isConnected ? "green" : "red"} icon={<WifiOutlined />}>
-                                    {isConnected ? "Connected" : "Disconnected"}
+                                <Tag color={socketConnected ? "green" : "red"} icon={<WifiOutlined />}>
+                                    {socketConnected ? "Connected" : "Disconnected"}
                                 </Tag>
                                 {testRunning && <Tag color="blue">RUNNING</Tag>}
                             </div>

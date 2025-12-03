@@ -1,5 +1,4 @@
-import { Server as HttpServer } from 'http';
-import { Server as SocketIOServer, Socket } from 'socket.io';
+import type { Application, Response } from "express";
 
 /**
  * WebSocket Service - Real-time communication with frontend
@@ -11,58 +10,66 @@ import { Server as SocketIOServer, Socket } from 'socket.io';
  * - Handles client connections/disconnections
  */
 class WebSocketService {
-    private io: SocketIOServer | null = null;
-    private clients: Set<Socket> = new Set();
+    private initialized = false;
+    private clients: Set<Response> = new Set();
 
     /**
      * Initialize WebSocket server
      */
-    initialize(httpServer: HttpServer): void {
-        this.io = new SocketIOServer(httpServer, {
-            cors: {
-                origin: "*", // Configure based on your needs
-                methods: ["GET", "POST"]
-            }
+    initialize(app: Application): void {
+        if (this.initialized) return;
+
+        app.get("/ws", (req, res) => {
+            res.setHeader("Content-Type", "text/event-stream");
+            res.setHeader("Cache-Control", "no-cache");
+            res.setHeader("Connection", "keep-alive");
+            res.flushHeaders?.();
+
+            this.clients.add(res);
+
+            const keepAlive = setInterval(() => {
+                res.write(`: heartbeat ${Date.now()}\n\n`);
+            }, 15000);
+
+            res.write(`data: ${JSON.stringify({
+                event: "connected",
+                payload: { message: "ok" },
+                timestamp: new Date().toISOString(),
+            })}\n\n`);
+
+            req.on("close", () => {
+                clearInterval(keepAlive);
+                this.clients.delete(res);
+            });
         });
 
-        this.io.on('connection', (socket: Socket) => {
-            console.log(`🔌 WebSocket client connected: ${socket.id}`);
-            this.clients.add(socket);
-
-            socket.on('disconnect', () => {
-                console.log(`🔌 WebSocket client disconnected: ${socket.id}`);
-                this.clients.delete(socket);
-            });
-
-            // Handle ping/pong for connection health
-            socket.on('ping', () => {
-                socket.emit('pong');
-            });
-        });
-
-        console.log('🔌 WebSocket service initialized');
+        this.initialized = true;
+        console.log("🔌 SSE stream initialized at /ws");
     }
 
     /**
      * Broadcast message to all connected clients
      */
     broadcast(event: string, data: any): void {
-        if (!this.io) {
-            return;
-        }
+        if (!this.initialized) return;
 
-        this.io.emit(event, data);
+        const body = JSON.stringify({
+            event,
+            payload: data,
+            timestamp: new Date().toISOString(),
+        });
+
+        this.clients.forEach((res) => {
+            res.write(`data: ${body}\n\n`);
+        });
     }
 
     /**
      * Send message to specific client
      */
-    sendToClient(socketId: string, event: string, data: any): void {
-        if (!this.io) {
-            return;
-        }
-
-        this.io.to(socketId).emit(event, data);
+    sendToClient(_socketId: string, event: string, data: any): void {
+        // SSE is broadcast-only; fall back to broadcast
+        this.broadcast(event, data);
     }
 
     /**
@@ -126,7 +133,7 @@ class WebSocketService {
      * Check if initialized
      */
     isInitialized(): boolean {
-        return this.io !== null;
+        return this.initialized;
     }
 }
 

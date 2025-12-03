@@ -1,3 +1,5 @@
+import websocketService from "./websocket_service";
+
 interface SensorEvent {
     sensorId: string;
     mac: string;
@@ -17,11 +19,14 @@ export async function processSensorEvent(event: SensorEvent) {
         timestamp,
     });
 
-
-    // -----------------------------------------
-    // TODO:
-    // Broadcast to frontend (WebSocket / SSE)
-    // -----------------------------------------
+    // Broadcast to connected WebSocket clients so UI can react immediately
+    websocketService.broadcast("sensor-detection", {
+        sensorId: event.sensorId,
+        mac: event.mac,
+        event: event.event,
+        raw: event.raw,
+        timestamp,
+    });
 
     return;
 }

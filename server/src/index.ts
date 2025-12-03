@@ -1,3 +1,4 @@
+import "./config/env";
 import express from "express";
 import { createServer } from "http";
 import cors from "cors";
@@ -7,23 +8,29 @@ import testRouter from "./routes/test_routes";
 import serialRouter from "./routes/serial_manager_routes";
 import sensorEventsRouter from "./routes/sensorEvents_routes";
 import testExecutionRouter from "./routes/test_execution_routes";
-import path from 'path';
-import dotenv from 'dotenv';
-import WebSocketService from "./services/websocket_service";
+import websocketService from "./services/websocket_service";
 
-dotenv.config({ path: path.resolve(__dirname, "..", "..", ".env") });
 const serverIP = process.env.SERVER_IP;
-console.log("Loaded SERVER_IP:", process.env.SERVER_IP);
+if (serverIP) {
+    console.log("Loaded SERVER_IP:", serverIP);
+} else {
+    console.log("SERVER_IP not provided; relying on localhost/host headers");
+}
 
 const app = express();
 const httpServer = createServer(app);
 
+const allowedOrigins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+];
+
+if (serverIP) {
+    allowedOrigins.push(`http://${serverIP}:5173`); // PC LAN IP with Vite port
+}
+
 app.use(cors({
-    origin: [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        `http://${serverIP}:5173`, // PC LAN IP with Vite port
-    ],
+    origin: allowedOrigins,
     methods: ["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
     allowedHeaders: ["Content-Type","Authorization"],
     credentials: true,
@@ -42,13 +49,13 @@ app.use("/api/serial", serialRouter);
 app.use("/api", sensorEventsRouter);
 app.use("/api/test-execution", testExecutionRouter);
 
-// Initialize WebSocket server
-WebSocketService.instance.initialize(httpServer);
+// Initialize SSE stream for real-time events
+websocketService.initialize(app);
 
 const PORT = Number(process.env.SERVER_PORT ?? 3000);
 
 // Bind to 0.0.0.0 so other devices can reach it
 httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(`🚀 API listening on http://0.0.0.0:${PORT}`);
-    console.log(`🔌 WebSocket available at ws://0.0.0.0:${PORT}/ws`);
+    console.log(`🔌 SSE stream available at http://0.0.0.0:${PORT}/ws`);
 });
