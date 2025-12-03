@@ -18,6 +18,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { LogCard } from "../Components/logCard";
+import { api } from "../Components/apiAxios";
 
 const { Text, Title } = Typography;
 const { Header, Content } = Layout;
@@ -104,14 +105,10 @@ export default function ManualControl() {
         action: "start" | "stop"
     ) {
         try {
-            await fetch("http://localhost:3000/api/robot/move", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    command: "move",
-                    direction,
-                    action,
-                }),
+            await api.post("/api/robot/move", {
+                command: "move",
+                direction,
+                action,
             });
         } catch (err) {
             console.error("sendMoveCommand error:", err);
