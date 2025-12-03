@@ -2,6 +2,7 @@ import { EventEmitter } from "events";
 import pool from "../db_conn";
 import RobotAPI, { Position, MovementResult } from "./robot_api_service";
 import bleEventBus from "./bleEventBus";
+import websocketService from "./websocket_service";
 
 /**
  * Test Orchestration Service
@@ -54,6 +55,16 @@ export class TestOrchestrator extends EventEmitter {
     }
 
     /**
+     * Helper to broadcast structured updates to WebSocket clients
+     */
+    private broadcast(event: string, payload: any): void {
+        websocketService.broadcast(event, {
+            ...payload,
+            timestamp: new Date().toISOString(),
+        });
+    }
+
+    /**
      * Start a complete test suite
      */
     async startTest(testId: number): Promise<void> {
@@ -68,6 +79,7 @@ export class TestOrchestrator extends EventEmitter {
             // Mark test as started
             await pool.query("SELECT start_test($1)", [testId]);
             this.emit("test_started", { testId });
+            this.broadcast("test-event", { type: "test:started", testId });
 
             // Load test configuration
             const config = await this.loadTestConfiguration(testId);
@@ -79,6 +91,7 @@ export class TestOrchestrator extends EventEmitter {
             }
 
             this.emit("robot_initialized", { testId });
+            this.broadcast("test-event", { type: "robot:initialized", testId });
 
             // Execute test phases based on test choice
             await this.executeTestPhases(testId, config);
@@ -86,6 +99,7 @@ export class TestOrchestrator extends EventEmitter {
             // Mark test as completed
             await pool.query("SELECT complete_test($1)", [testId]);
             this.emit("test_completed", { testId });
+            this.broadcast("test-event", { type: "test:completed", testId });
 
         } catch (error) {
             await this.handleTestError(testId, error);
@@ -102,6 +116,7 @@ export class TestOrchestrator extends EventEmitter {
         // Phase 1: Radial Boundary Tests
         await this.updateTestPhase(testId, "radial_boundary");
         this.emit("phase_started", { testId, phase: "radial_boundary" });
+        this.broadcast("test-event", { type: "test:phase_started", phase: "radial_boundary", testId });
         
         for (const distance of config.radialDistances) {
             if (this.testAborted) break;
@@ -112,6 +127,7 @@ export class TestOrchestrator extends EventEmitter {
         if (!this.testAborted) {
             await this.updateTestPhase(testId, "tangential_boundary");
             this.emit("phase_started", { testId, phase: "tangential_boundary" });
+            this.broadcast("test-event", { type: "test:phase_started", phase: "tangential_boundary", testId });
             
             for (const distance of config.tangentialDistances) {
                 if (this.testAborted) break;
@@ -123,6 +139,7 @@ export class TestOrchestrator extends EventEmitter {
         if (!this.testAborted && config.tangentialAngles.length > 0) {
             await this.updateTestPhase(testId, "tangential_grid");
             this.emit("phase_started", { testId, phase: "tangential_grid" });
+            this.broadcast("test-event", { type: "test:phase_started", phase: "tangential_grid", testId });
             await this.executeTangentialGridTest(testId, config);
         }
     }
@@ -152,6 +169,14 @@ export class TestOrchestrator extends EventEmitter {
                     angle,
                     attempt: attemptNumber
                 });
+                this.broadcast("test-event", {
+                    type: "test:measurement_started",
+                    phase: "radial_boundary",
+                    testId,
+                    distance,
+                    angle,
+                    attempt: attemptNumber
+                });
 
                 // Move robot to position (approach from further out)
                 const startDistance = distance + 1.0; // Start 1m further
@@ -168,6 +193,7 @@ export class TestOrchestrator extends EventEmitter {
 
                 if (!result.success) {
                     this.emit("movement_failed", { testId, error: result.error });
+                    this.broadcast("test-event", { type: "robot:movement_failed", testId, error: result.error });
                     attemptNumber++;
                     continue;
                 }
@@ -190,6 +216,16 @@ export class TestOrchestrator extends EventEmitter {
                 this.emit("measurement_completed", {
                     testId,
                     type: "radial_boundary",
+                    distance,
+                    angle,
+                    detected,
+                    attempt: attemptNumber,
+                    position: result.position
+                });
+                this.broadcast("test-event", {
+                    type: "test:measurement_completed",
+                    phase: "radial_boundary",
+                    testId,
                     distance,
                     angle,
                     detected,
@@ -232,6 +268,14 @@ export class TestOrchestrator extends EventEmitter {
                     angle,
                     attempt: attemptNumber
                 });
+                this.broadcast("test-event", {
+                    type: "test:measurement_started",
+                    phase: "tangential_boundary",
+                    testId,
+                    radius,
+                    angle,
+                    attempt: attemptNumber
+                });
 
                 // Move to starting angle (15 degrees before target)
                 const startAngle = angle - 15;
@@ -243,6 +287,7 @@ export class TestOrchestrator extends EventEmitter {
 
                 if (!result.success) {
                     this.emit("movement_failed", { testId, error: result.error });
+                    this.broadcast("test-event", { type: "robot:movement_failed", testId, error: result.error });
                     attemptNumber++;
                     continue;
                 }
@@ -265,6 +310,16 @@ export class TestOrchestrator extends EventEmitter {
                 this.emit("measurement_completed", {
                     testId,
                     type: "tangential_boundary",
+                    radius,
+                    angle,
+                    detected,
+                    attempt: attemptNumber,
+                    position: result.position
+                });
+                this.broadcast("test-event", {
+                    type: "test:measurement_completed",
+                    phase: "tangential_boundary",
+                    testId,
                     radius,
                     angle,
                     detected,
@@ -306,6 +361,13 @@ export class TestOrchestrator extends EventEmitter {
                     radius,
                     angle
                 });
+                this.broadcast("test-event", {
+                    type: "test:measurement_started",
+                    phase: "tangential_grid",
+                    testId,
+                    radius,
+                    angle
+                });
 
                 const result = await RobotAPI.instance.moveTangential(angle, radius, 30);
                 await this.delay(500);
@@ -326,6 +388,15 @@ export class TestOrchestrator extends EventEmitter {
                 this.emit("measurement_completed", {
                     testId,
                     type: "tangential_grid",
+                    radius,
+                    angle,
+                    detected,
+                    position: result.position
+                });
+                this.broadcast("test-event", {
+                    type: "test:measurement_completed",
+                    phase: "tangential_grid",
+                    testId,
                     radius,
                     angle,
                     detected,
@@ -523,6 +594,7 @@ export class TestOrchestrator extends EventEmitter {
 
         await this.logTestEvent(testId, "test_failed", { error: String(error) });
         this.emit("test_failed", { testId, error });
+        this.broadcast("test-event", { type: "test:failed", testId, error: String(error) });
     }
 
     /**
@@ -542,6 +614,7 @@ export class TestOrchestrator extends EventEmitter {
         );
 
         this.emit("test_aborted", { testId: this.activeTestId });
+        this.broadcast("test-event", { type: "test:aborted", testId: this.activeTestId });
         this.activeTestId = null;
     }
 
@@ -581,6 +654,12 @@ export class TestOrchestrator extends EventEmitter {
         bleEventBus.on("detection", (event: any) => {
             if (this.activeTestId) {
                 this.emit("sensor_detection", {
+                    testId: this.activeTestId,
+                    detected: event.detected,
+                    timestamp: event.timestamp,
+                    raw: event.raw
+                });
+                this.broadcast("sensor-detection", {
                     testId: this.activeTestId,
                     detected: event.detected,
                     timestamp: event.timestamp,

@@ -1,6 +1,7 @@
 import pool from "../db_conn";
 import type { Sensor } from "../models/sensor";
 import bleEventBus, { DetectionEvent } from "./bleEventBus";
+import websocketService from "./websocket_service";
 
 export async function insertSensor(sensor: Sensor): Promise<void> {
     const {
@@ -95,6 +96,9 @@ export async function processBleDetectionEvent(payload: any): Promise<void> {
 
     // Notify the rest of the system
     bleEventBus.emit("detection", event);
+
+    // Broadcast to frontend listeners in real time
+    websocketService.broadcastSensorDetection(event);
 
 
 }
