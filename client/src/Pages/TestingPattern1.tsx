@@ -41,7 +41,7 @@ const TestingPageEnhanced: React.FC = () => {
     const testIdParam = searchParams.get('testId');
     const resumeParam = searchParams.get('resume');
 
-    const [testId, setTestId] = useState<number | null>(testIdParam ? parseInt(testIdParam) : null);
+    const testId = testIdParam ? parseInt(testIdParam) : null;
     const [isResuming, setIsResuming] = useState<boolean>(resumeParam === 'true');
     const [testRunning, setTestRunning] = useState(false);
     const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -190,6 +190,24 @@ const TestingPageEnhanced: React.FC = () => {
             fetchProgress();
         }
     };
+
+    // WebSocket connection
+    const { isConnected } = useWebSocket({
+        onConnect: () => {
+            addLog("info", "Connected to test monitoring");
+        },
+        onDisconnect: () => {
+            addLog("warning", "Disconnected from test monitoring");
+        },
+        onEvent: handleWebSocketMessage
+    });
+
+    // Auto-start resume if testId and resume flag are present
+    useEffect(() => {
+        if (testId && isResuming) {
+            loadResumeInfo();
+        }
+    }, [testId, isResuming]);
 
     const fetchProgress = async () => {
         if (!testId) return;

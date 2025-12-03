@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Card, Button, Space, Slider, Switch, Tag, Divider, Row, Col, InputNumber, message } from "antd";
-import { 
-    ThunderboltOutlined, 
-    WifiOutlined, 
+import {
+    WifiOutlined,
     RobotOutlined,
     RadarChartOutlined,
     BugOutlined

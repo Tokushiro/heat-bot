@@ -41,7 +41,7 @@ app.use("/api", sensorEventsRouter);
 app.use("/api/test-execution", testExecutionRouter);
 
 // Initialize WebSocket server
-WebSocketService.instance.initialize(httpServer);
+websocketService.initialize(httpServer);
 
 const PORT = Number(process.env.SERVER_PORT ?? 3000);
 
