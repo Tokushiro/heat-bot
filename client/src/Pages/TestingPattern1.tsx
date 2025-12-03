@@ -14,6 +14,44 @@ export default function TestingPattern1() {
     const data = state as Test | undefined | TestDB;
     if (!data) return <Navigate to="/controlpanel" replace />;
 
+    // FIX: Get status with proper typing
+    const status = data.status ?? 'PLANNED';
+    const isCompleted = status === 'COMPLETED';
+    const isInProgress = status === 'IN_PROGRESS';
+
+    // FIX: Determine tag color based on actual status
+    const getStatusColor = () => {
+        switch (status) {
+            case 'COMPLETED':
+                return 'green';
+            case 'IN_PROGRESS':
+                return 'blue';
+            case 'ERROR':
+                return 'red';
+            case 'PAUSED':
+                return 'orange';
+            case 'PLANNED':
+            default:
+                return 'default';
+        }
+    };
+
+    const getStatusDisplay = () => {
+        switch (status) {
+            case 'IN_PROGRESS':
+                return 'In Progress';
+            case 'COMPLETED':
+                return 'Completed';
+            case 'ERROR':
+                return 'Error';
+            case 'PAUSED':
+                return 'Paused';
+            case 'PLANNED':
+            default:
+                return 'Planned';
+        }
+    };
+
     return (
         <Layout>
             <Header
@@ -62,25 +100,26 @@ export default function TestingPattern1() {
                         />
                         <Text> RoboControl-X1</Text>
 
-                        {state.status == null || state.status == "incomplete" ? (
-                            <Tag color="red" style={{ borderRadius: "99px" }}>
-                                incomplete
-                            </Tag>
-                        ) : (
-                            <Tag
-                                color="green" style={{ borderRadius: "99px" }}>
-                                {state.status}
-                            </Tag>
-                        )}
+                        <Tag color={getStatusColor()} style={{ borderRadius: "99px" }}>
+                            {getStatusDisplay()}
+                        </Tag>
                     </Space>
                 </div>
 
                 <div style={{ flex: 1, display: "flex", justifyContent: "right" }}>
                     <Space>
-                        <Button color="primary" variant="solid">
-                            Start
+                        <Button
+                            color="primary"
+                            variant="solid"
+                            disabled={isCompleted || isInProgress}
+                        >
+                            {isInProgress ? 'Running' : isCompleted ? 'Completed' : 'Start'}
                         </Button>
-                        <Button color="red" variant="solid">
+                        <Button
+                            color="red"
+                            variant="solid"
+                            disabled={!isInProgress}
+                        >
                             Stop
                         </Button>
                     </Space>
@@ -89,14 +128,14 @@ export default function TestingPattern1() {
             <Content
                 style={{
                     height:'100vh'
-            }}>
+                }}>
                 <div
                     style={{
                         flex: 1 ,
                         textAlign: "center",
                     }}>
-                <Title level={2}>{data.test_name}</Title>
-                <Text>Monitor robot performance and communication logs in real-time</Text>
+                    <Title level={2}>{data.test_name}</Title>
+                    <Text>Monitor robot performance and communication logs in real-time</Text>
                 </div>
                 <br/>
                 <Flex gap={"middle"} justify={"center"} align={"center"}>

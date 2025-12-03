@@ -12,17 +12,27 @@ const { Text, Title } = Typography;
 
 export default function HistoryPage() {
     const navigate = useNavigate();
-    //const baseURL = useMemo(() => "http://localhost:3000", []);
 
     const [items, setItems] = useState<TestDB[]>();
 
-    const handleDelete = (number?: number) => {
-        return(number)
+    // FIX: Handle nullable test_id properly
+    const handleDelete = (testId: number | null | undefined) => {
+        if (!testId) {
+            console.warn("Cannot delete test with null/undefined ID");
+            return;
+        }
+
+        // TODO: Implement actual delete logic
+        console.log("Delete test:", testId);
+
+        // Example delete API call:
+        // await api.delete(`/api/test/${testId}`);
+        // await fetchTests(); // Refresh list
     };
 
     useEffect(() => {
-        fetchTests()
-    });
+        fetchTests();
+    }, []); // FIX: Add dependency array to prevent infinite loop
 
     const fetchTests = async () => {
         try {
@@ -33,7 +43,9 @@ export default function HistoryPage() {
                 test_choice: s.test_choice,
                 sensor_id: s.sensor_id,
                 test_date: new Date(s.test_date),
-                status: "incomplete"
+                status: s.status ?? 'PLANNED', // Use actual status from DB
+                started_at: s.started_at,
+                finished_at: s.finished_at,
             }));
             setItems(opts);
         } catch (err: unknown) {
@@ -119,4 +131,3 @@ export default function HistoryPage() {
         </Layout>
     );
 }
-

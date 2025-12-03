@@ -5,6 +5,7 @@ import testChoiceRouter from "./routes/test_choice_rotues";
 import testRouter from "./routes/test_routes";
 import serialRouter from "./routes/serial_manager_routes";
 import sensorEventsRouter from "./routes/sensorEvents_routes";
+import testStepRouter from "./routes/test_step_routes";
 import path from 'path';
 import dotenv from 'dotenv';
 
@@ -34,6 +35,7 @@ app.use("/api/testchoice", testChoiceRouter);
 app.use("/api/test", testRouter);
 app.use("/api/serial", serialRouter);
 app.use("/api", sensorEventsRouter);
+app.use("/api/test-steps", testStepRouter);
 
 const PORT = Number(process.env.SERVER_PORT ?? 3000);
 // Bind to 0.0.0.0 so other devices can reach it

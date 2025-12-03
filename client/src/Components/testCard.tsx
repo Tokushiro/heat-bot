@@ -1,7 +1,8 @@
 import { Card, Row, Col, Typography, Tag, Space, Button, Popconfirm } from "antd";
 import type { Test } from "../Types/test.ts";
 
-export type TestDB = Test & { status: "complete" | "incomplete" };
+// Remove the old TestDB type definition since Test now includes status
+export type TestDB = Test;
 
 export type TestCardProps = {
     test: TestDB;
@@ -19,7 +20,46 @@ function formatDate(d: Date) {
 }
 
 export default function TestCard({ test, onContinue, onDelete }: TestCardProps) {
-    const isComplete = test.status === "complete";
+    // FIX: Use the actual status values from the database
+    const status = test.status ?? 'PLANNED';
+    const isComplete = status === 'COMPLETED';
+    const isInProgress = status === 'IN_PROGRESS';
+    //const isError = status === 'ERROR';
+    const isPaused = status === 'PAUSED';
+
+    // Determine tag color based on status
+    const getStatusColor = () => {
+        switch (status) {
+            case 'COMPLETED':
+                return 'green';
+            case 'IN_PROGRESS':
+                return 'blue';
+            case 'ERROR':
+                return 'red';
+            case 'PAUSED':
+                return 'orange';
+            case 'PLANNED':
+            default:
+                return 'default';
+        }
+    };
+
+    // Format status for display
+    const getStatusDisplay = () => {
+        switch (status) {
+            case 'IN_PROGRESS':
+                return 'In Progress';
+            case 'COMPLETED':
+                return 'Completed';
+            case 'ERROR':
+                return 'Error';
+            case 'PAUSED':
+                return 'Paused';
+            case 'PLANNED':
+            default:
+                return 'Planned';
+        }
+    };
 
     return (
         <Card
@@ -35,7 +75,19 @@ export default function TestCard({ test, onContinue, onDelete }: TestCardProps) 
                         <Typography.Text strong style={{ fontSize: 18 }} ellipsis>
                             {test.test_name || "Untitled test"}
                         </Typography.Text>
-                        <Typography.Text type="secondary">Created: {formatDate(test.test_date)}</Typography.Text>
+                        <Typography.Text type="secondary">
+                            Created: {formatDate(test.test_date)}
+                        </Typography.Text>
+                        {test.started_at && (
+                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                Started: {formatDate(new Date(test.started_at))}
+                            </Typography.Text>
+                        )}
+                        {test.finished_at && (
+                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                Finished: {formatDate(new Date(test.finished_at))}
+                            </Typography.Text>
+                        )}
                     </Space>
                 </Col>
 
@@ -53,19 +105,33 @@ export default function TestCard({ test, onContinue, onDelete }: TestCardProps) 
                         }}
                     >
                         <Tag
-                            color={isComplete ? "green" : "red"}
-                            style={{ borderRadius: 999, padding: "2px 10px", textTransform: "capitalize", fontWeight: 500 }}
+                            color={getStatusColor()}
+                            style={{
+                                borderRadius: 999,
+                                padding: "2px 10px",
+                                textTransform: "capitalize",
+                                fontWeight: 500
+                            }}
                         >
-                            {test.status}
+                            {getStatusDisplay()}
                         </Tag>
 
 
-                        <Button type="primary" onClick={onContinue} shape="round">
-                            Continue
+                        <Button
+                            type="primary"
+                            onClick={onContinue}
+                            shape="round"
+                            disabled={isComplete} // Optionally disable if completed
+                        >
+                            {isComplete ? 'View' : isInProgress || isPaused ? 'Resume' : 'Start'}
                         </Button>
 
 
-                        <Button onClick={() => console.log("CSV Download") } shape="round">
+                        <Button
+                            onClick={() => console.log("CSV Download")}
+                            shape="round"
+                            disabled={!isComplete} // Only enable CSV for completed tests
+                        >
                             CSV
                         </Button>
 
