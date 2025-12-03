@@ -8,7 +8,7 @@ import testRouter from "./routes/test_routes";
 import serialRouter from "./routes/serial_manager_routes";
 import sensorEventsRouter from "./routes/sensorEvents_routes";
 import testExecutionRouter from "./routes/test_execution_routes";
-import websocketService from "./services/websocket_service";
+import WebSocketService from "./services/websocket_service";
 
 const serverIP = process.env.SERVER_IP;
 console.log("Loaded SERVER_IP:", process.env.SERVER_IP);

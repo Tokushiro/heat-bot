@@ -59,11 +59,11 @@ export function useWebSocket(options: UseWebSocketOptions) {
             onDisconnect?.();
         });
 
-        socket.on("connect_error", (err: Error) => {
+        socket.on("connect_error", (err) => {
             onError?.(err);
         });
 
-        socket.onAny((event: string, payload: unknown) => {
+        socket.onAny((event, payload) => {
             const message: WebSocketEvent = {
                 event,
                 payload,
