@@ -5,34 +5,50 @@ export async function startMasterTest(req: Request, res: Response) {
     try {
         const config: MasterTestConfiguration = req.body;
 
+        console.log("=".repeat(60));
+        console.log("[MasterTest Controller] Received start test request");
+        console.log(`[MasterTest Controller] Test ID: ${config.test_id}`);
+        console.log(`[MasterTest Controller] Sensor ID: ${config.sensor_id}`);
+        console.log(`[MasterTest Controller] Test Type: ${config.test_type}`);
+        console.log(`[MasterTest Controller] Config:`, JSON.stringify(config, null, 2));
+        console.log("=".repeat(60));
+
         if (!config.test_id) {
+            console.error("[MasterTest Controller] ❌ Missing test_id");
             return res.status(400).json({ error: "test_id is required" });
         }
 
         if (!config.test_type) {
+            console.error("[MasterTest Controller] ❌ Missing test_type");
             return res.status(400).json({ error: "test_type is required" });
         }
 
         const orchestrator = MasterTestOrchestrator.instance;
 
         if (orchestrator.isTestRunning()) {
+            console.warn("[MasterTest Controller] ⚠️ Test already running");
             return res.status(409).json({ error: "A test is already running" });
         }
 
+        console.log("[MasterTest Controller] ✅ Starting test asynchronously...");
+
         // Start test asynchronously (begins with boundary detection)
         orchestrator.startTest(config).catch((error) => {
-            console.error("[MasterTest] Error:", error);
+            console.error("[MasterTest Controller] ❌ Test execution error:", error);
         });
 
-        return res.status(202).json({ 
-            message: "Test started (boundary detection phase)", 
+        console.log("[MasterTest Controller] ✅ Test started successfully");
+
+        return res.status(202).json({
+            message: "Test started (boundary detection phase)",
             test_id: config.test_id,
             phase: 'BOUNDARY_DETECTION'
         });
 
     } catch (error: any) {
-        return res.status(500).json({ 
-            error: error.message || "Failed to start test" 
+        console.error("[MasterTest Controller] ❌ Exception:", error);
+        return res.status(500).json({
+            error: error.message || "Failed to start test"
         });
     }
 }
@@ -173,6 +189,7 @@ export function masterTestStream(req: Request, res: Response) {
     const onBoundaryFoundAtAngle = (data: any) => send("boundary_found_at_angle", data);
     const onComplianceMeasurementCompleted = (data: any) => send("compliance_measurement_completed", data);
     const onPhaseProgress = (data: any) => send("phase_progress", data);
+    const onTestLog = (data: any) => send("test_log", data);
 
     // Register listeners
     orchestrator.on("test_started", onTestStarted);
@@ -189,6 +206,7 @@ export function masterTestStream(req: Request, res: Response) {
     orchestrator.on("boundary_found_at_angle", onBoundaryFoundAtAngle);
     orchestrator.on("compliance_measurement_completed", onComplianceMeasurementCompleted);
     orchestrator.on("phase_progress", onPhaseProgress);
+    orchestrator.on("test_log", onTestLog);
 
     // Clean up when client disconnects
     req.on("close", () => {
@@ -206,6 +224,7 @@ export function masterTestStream(req: Request, res: Response) {
         orchestrator.off("boundary_found_at_angle", onBoundaryFoundAtAngle);
         orchestrator.off("compliance_measurement_completed", onComplianceMeasurementCompleted);
         orchestrator.off("phase_progress", onPhaseProgress);
+        orchestrator.off("test_log", onTestLog);
         res.end();
     });
 }

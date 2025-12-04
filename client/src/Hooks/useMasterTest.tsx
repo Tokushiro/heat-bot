@@ -154,10 +154,15 @@ export function useMasterTest() {
         eventSource.addEventListener("detection", (e) => {
             const data = JSON.parse(e.data);
             addEvent("detection", data);
-            
+
             if (data.detected) {
                 message.info("Detection event received", 1);
             }
+        });
+
+        eventSource.addEventListener("test_log", (e) => {
+            const data = JSON.parse(e.data);
+            addEvent("test_log", data);
         });
 
         eventSource.onerror = (error) => {
@@ -222,10 +227,20 @@ export function useMasterTest() {
      * Start a new master test
      */
     const startTest = useCallback(async (config: MasterTestConfiguration) => {
+        console.log("=".repeat(60));
+        console.log("📡 [Hook] startTest called");
+        console.log("=".repeat(60));
+        console.log("Config:", config);
+        console.log("API URL:", "/api/master-test/start");
+
         try {
-            await api.post("/api/master-test/start", config);
+            console.log("📤 Sending POST request...");
+            const response = await api.post("/api/master-test/start", config);
+            console.log("✅ Response received:", response.data);
             // Status will be updated via SSE
         } catch (err: any) {
+            console.error("❌ API Error:", err);
+            console.error("Error response:", err?.response?.data);
             message.error(err?.response?.data?.error || "Failed to start test");
             throw err;
         }

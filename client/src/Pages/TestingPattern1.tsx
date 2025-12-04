@@ -1,10 +1,10 @@
-import { Layout, Button, Space, Tag, Typography, Card, Progress, List, Statistic, Row, Col } from "antd";
+import { Layout, Button, Space, Tag, Typography, Card, Progress, List, Statistic, Row, Col, Modal } from "antd";
 import { LeftOutlined, CheckCircleOutlined } from "@ant-design/icons";
 import { useNavigate, useLocation, Navigate } from "react-router-dom";
 import type { Test } from "../Types/test.ts"
 import type { TestDB } from "../Components/testCard.tsx";
 import { useMasterTest } from "../Hooks/useMasterTest.tsx";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 const { Text, Title } = Typography;
 const { Header, Content } = Layout;
@@ -35,6 +35,24 @@ export default function TestingPattern1() {
     const status = data.status ?? 'PLANNED';
     const isCompleted = status === 'COMPLETED';
     const isPaused = status === 'PAUSED';
+    const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+
+    // Debug logging
+    useEffect(() => {
+        console.log("=".repeat(60));
+        console.log("📊 [UI] Component State:");
+        console.log("=".repeat(60));
+        console.log("isRunning:", isRunning);
+        console.log("isPaused:", isPaused);
+        console.log("isCompleted:", isCompleted);
+        console.log("awaitingContinuation:", awaitingContinuation);
+        console.log("connected:", connected);
+        console.log("status:", status);
+        console.log("data:", data);
+        console.log("Button should show:", !isRunning && !isPaused && !awaitingContinuation);
+        console.log("Button should be enabled:", !isCompleted);
+        console.log("=".repeat(60));
+    }, [isRunning, isPaused, isCompleted, awaitingContinuation, connected, status, data]);
 
     // Handle resuming from history
     useEffect(() => {
@@ -83,10 +101,35 @@ export default function TestingPattern1() {
         }
     };
 
-    const handleStart = async () => {
-        if (!data.test_id || !data.sensor_id) return;
+    const handleStart = () => {
+        console.log("=".repeat(60));
+        console.log("🚀 [UI] START BUTTON CLICKED");
+        console.log("=".repeat(60));
+        console.log("Test ID:", data.test_id);
+        console.log("Sensor ID:", data.sensor_id);
+        console.log("Data:", data);
+
+        if (!data.test_id || !data.sensor_id) {
+            console.error("❌ Missing test_id or sensor_id!");
+            console.log("Test ID:", data.test_id);
+            console.log("Sensor ID:", data.sensor_id);
+            return;
+        }
+
+        console.log("✅ Opening confirmation modal...");
+        setConfirmModalOpen(true);
+    };
+
+    const handleConfirmStart = async () => {
+        console.log("✅ User confirmed - Starting test...");
+
+        if (!data.test_id || !data.sensor_id) {
+            console.error("❌ Missing test_id or sensor_id");
+            return;
+        }
 
         try {
+            console.log("📡 Calling startTest API...");
             await startTest({
                 test_id: data.test_id,
                 sensor_id: data.sensor_id,
@@ -108,40 +151,50 @@ export default function TestingPattern1() {
                 detection_wait_time: 2000,
                 repeat_measurements: 2
             });
+            console.log("✅ Test started successfully!");
+            setConfirmModalOpen(false);
         } catch (error) {
-            console.error("Failed to start test:", error);
+            console.error("❌ Failed to start test:", error);
         }
     };
 
     const handlePause = async () => {
+        console.log("⏸️ Pause button clicked");
         try {
             await pauseTest();
+            console.log("✅ Test paused");
         } catch (error) {
-            console.error("Failed to pause test:", error);
+            console.error("❌ Failed to pause test:", error);
         }
     };
 
     const handleResume = async () => {
+        console.log("▶️ Resume button clicked");
         try {
             await resumeTest();
+            console.log("✅ Test resumed");
         } catch (error) {
-            console.error("Failed to resume test:", error);
+            console.error("❌ Failed to resume test:", error);
         }
     };
 
     const handleStop = async () => {
+        console.log("⏹️ Stop button clicked");
         try {
             await stopTest();
+            console.log("✅ Test stopped");
         } catch (error) {
-            console.error("Failed to stop test:", error);
+            console.error("❌ Failed to stop test:", error);
         }
     };
 
     const handleContinue = async () => {
+        console.log("➡️ Continue button clicked");
         try {
             await continueToCompliance();
+            console.log("✅ Continuing to compliance test");
         } catch (error) {
-            console.error("Failed to continue:", error);
+            console.error("❌ Failed to continue:", error);
         }
     };
 
@@ -301,7 +354,7 @@ export default function TestingPattern1() {
                 <Card title="Event Log">
                     <List
                         size="small"
-                        dataSource={events.slice(0, 30)}
+                        dataSource={events.slice(0, 50)}
                         renderItem={(event) => (
                             <List.Item>
                                 <Space>
@@ -309,18 +362,21 @@ export default function TestingPattern1() {
                                         {new Date(event.timestamp).toLocaleTimeString()}
                                     </Text>
                                     <Tag color={
-                                        event.type.includes('completed') ? 'green' :
-                                            event.type.includes('failed') || event.type.includes('error') ? 'red' :
-                                                event.type.includes('started') ? 'blue' :
-                                                    event.type.includes('boundary_found') ? 'cyan' :
-                                                        'default'
+                                        event.type === 'test_log' ? 'blue' :
+                                            event.type.includes('completed') ? 'green' :
+                                                event.type.includes('failed') || event.type.includes('error') ? 'red' :
+                                                    event.type.includes('started') ? 'blue' :
+                                                        event.type.includes('boundary_found') ? 'cyan' :
+                                                            'default'
                                     }>
                                         {event.type}
                                     </Tag>
                                     <Text style={{ fontSize: 12 }}>
-                                        {event.type === 'boundary_found_at_angle' && event.data.boundary
-                                            ? `${event.data.angle}°: ${event.data.boundary.toFixed(2)}m`
-                                            : JSON.stringify(event.data).slice(0, 100)}
+                                        {event.type === 'test_log' && event.data.message
+                                            ? event.data.message
+                                            : event.type === 'boundary_found_at_angle' && event.data.boundary
+                                                ? `${event.data.angle}°: ${event.data.boundary.toFixed(2)}m`
+                                                : JSON.stringify(event.data).slice(0, 100)}
                                     </Text>
                                 </Space>
                             </List.Item>
@@ -328,6 +384,30 @@ export default function TestingPattern1() {
                     />
                 </Card>
             </Content>
+
+            {/* Start Test Confirmation Modal */}
+            <Modal
+                open={confirmModalOpen}
+                title="Start Test?"
+                onCancel={() => setConfirmModalOpen(false)}
+                onOk={handleConfirmStart}
+                okText="Start Test"
+                cancelText="Cancel"
+                width={500}
+            >
+                <div>
+                    <p><strong>Test:</strong> {data.test_name}</p>
+                    <p><strong>Type:</strong> Full Boundary Detection & Compliance Test</p>
+                    <p><strong>Phases:</strong></p>
+                    <ul style={{ marginLeft: 20 }}>
+                        <li>Phase 1: Boundary Detection (8 angles)</li>
+                        <li>Phase 2: Compliance Testing</li>
+                    </ul>
+                    <p style={{ marginTop: 16, color: '#faad14' }}>
+                        ⚠️ Make sure the robot and sensor are ready before starting!
+                    </p>
+                </div>
+            </Modal>
         </Layout>
     );
 }

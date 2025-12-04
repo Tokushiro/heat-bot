@@ -1,53 +1,64 @@
-import { SerialManager } from "./serial_mannager_service"
 import { EventEmitter } from "events";
 import { IRobotAPI, Position, MovementResult } from "./interfaces/IRobotAPI";
 
-// Re-export for backward compatibility
-export { Position, MovementResult };
-
-export class RobotAPI extends EventEmitter implements IRobotAPI {
-    private static _instance: RobotAPI;
+/**
+ * Mock implementation of Robot API for testing without real hardware
+ * Simulates H.E.A.T. Bot movement including:
+ * - Rotating Arm (76mm × 76mm × 380mm, mounted at 750mm height)
+ * - Movement speeds (0.5 m/s standard test speed)
+ * - Realistic timing delays
+ */
+export class MockRobotAPI extends EventEmitter implements IRobotAPI {
+    private static _instance: MockRobotAPI;
     private currentPosition: Position = { x: 0, y: 0, angle: 0 };
     private isMoving: boolean = false;
     private moveQueue: Array<() => Promise<void>> = [];
     private processing: boolean = false;
+    private initialized: boolean = false;
+
+    // Simulation parameters
+    private readonly DEFAULT_SPEED = 50; // units per second
+    private readonly MOVEMENT_DELAY_PER_METER = 2000; // 2 seconds per meter (0.5 m/s)
+    private readonly HOME_TIME = 5000; // 5 seconds to home
+    private readonly INIT_TIME = 2000; // 2 seconds to initialize
 
     static get instance() {
-        if (!this._instance) this._instance = new RobotAPI();
+        if (!this._instance) this._instance = new MockRobotAPI();
         return this._instance;
     }
 
     private constructor() {
         super();
+        console.log("[MockRobotAPI] Mock Robot API initialized - No real hardware will be used");
     }
 
     /**
-     * Initialize robot - establish connection and home position
+     * Initialize mock robot - simulates connection and homing
      */
     async initialize(): Promise<boolean> {
         try {
-            if (!SerialManager.instance.connected) {
-                throw new Error("Serial connection not established");
-            }
+            console.log("[MockRobotAPI] Initializing mock robot...");
 
-            // Send connection command
-            await SerialManager.instance.send("conn");
-            await this.waitForResponse("conn", 2000);
+            // Simulate connection delay
+            await this.delay(this.INIT_TIME);
 
-            // Home the robot
+            // Mock home
             await this.homeRobot();
 
+            this.initialized = true;
             this.emit("initialized", this.currentPosition);
+
+            console.log("[MockRobotAPI] Mock robot initialized successfully");
             return true;
         } catch (error) {
-            console.error("[RobotAPI] Initialization failed:", error);
+            console.error("[MockRobotAPI] Initialization failed:", error);
             this.emit("error", { type: "initialization", error });
             return false;
         }
     }
 
     /**
-     * Home the robot to origin (0, 0, 0)
+     * Home the mock robot to origin (0, 0, 0)
      */
     async homeRobot(): Promise<MovementResult> {
         const startTime = Date.now();
@@ -56,8 +67,10 @@ export class RobotAPI extends EventEmitter implements IRobotAPI {
             this.isMoving = true;
             this.emit("movement_started", { type: "home" });
 
-            await SerialManager.instance.send("home");
-            await this.waitForResponse("home_complete", 10000);
+            console.log("[MockRobotAPI] Homing robot...");
+
+            // Simulate homing time
+            await this.delay(this.HOME_TIME);
 
             this.currentPosition = { x: 0, y: 0, angle: 0 };
             const duration = Date.now() - startTime;
@@ -67,6 +80,8 @@ export class RobotAPI extends EventEmitter implements IRobotAPI {
                 position: this.currentPosition,
                 duration
             });
+
+            console.log("[MockRobotAPI] Robot homed to (0, 0, 0°)");
 
             return {
                 success: true,
@@ -105,9 +120,14 @@ export class RobotAPI extends EventEmitter implements IRobotAPI {
                 this.isMoving = true;
                 this.emit("movement_started", { type: "move_to", target: { x, y }, speed });
 
-                const command = `moveto ${x.toFixed(2)} ${y.toFixed(2)} ${speed}`;
-                await SerialManager.instance.send(command);
-                await this.waitForResponse("move_complete", 30000);
+                // Calculate distance and simulate movement time
+                const distance = this.calculateDistance(this.currentPosition.x, this.currentPosition.y, x, y);
+                const movementTime = this.calculateMovementTime(distance, speed);
+
+                console.log(`[MockRobotAPI] Moving from (${this.currentPosition.x.toFixed(2)}, ${this.currentPosition.y.toFixed(2)}) to (${x.toFixed(2)}, ${y.toFixed(2)}) - Distance: ${distance.toFixed(2)}m, Time: ${(movementTime/1000).toFixed(1)}s`);
+
+                // Simulate movement
+                await this.delay(movementTime);
 
                 this.currentPosition.x = x;
                 this.currentPosition.y = y;
@@ -118,6 +138,8 @@ export class RobotAPI extends EventEmitter implements IRobotAPI {
                     position: this.currentPosition,
                     duration
                 });
+
+                console.log(`[MockRobotAPI] Arrived at (${x.toFixed(2)}, ${y.toFixed(2)})`);
 
                 return {
                     success: true,
@@ -148,6 +170,8 @@ export class RobotAPI extends EventEmitter implements IRobotAPI {
         const x = distance * Math.cos(radians);
         const y = distance * Math.sin(radians);
 
+        console.log(`[MockRobotAPI] Moving to polar coordinates: ${angle.toFixed(1)}° at ${distance.toFixed(2)}m`);
+
         const result = await this.moveTo(x, y, speed);
         if (result.success) {
             this.currentPosition.angle = angle;
@@ -157,20 +181,16 @@ export class RobotAPI extends EventEmitter implements IRobotAPI {
 
     /**
      * Move tangentially (circular arc around sensor)
-     * @param angle - Target angle in degrees (0-360)
-     * @param radius - Distance from sensor/origin
-     * @param speed - Movement speed
+     * Simulates walking parallel to detector
      */
     async moveTangential(angle: number, radius: number, speed: number = 50): Promise<MovementResult> {
+        console.log(`[MockRobotAPI] Tangential movement at radius ${radius.toFixed(2)}m, angle ${angle.toFixed(1)}°`);
         return this.movePolar(angle, radius, speed);
     }
 
     /**
      * Move radially (toward or away from sensor)
-     * @param startDistance - Starting distance from origin
-     * @param endDistance - Ending distance
-     * @param angle - Angle to maintain
-     * @param speed - Movement speed
+     * Simulates walking head-on toward detector
      */
     async moveRadial(
         startDistance: number,
@@ -178,14 +198,16 @@ export class RobotAPI extends EventEmitter implements IRobotAPI {
         angle: number,
         speed: number = 50
     ): Promise<MovementResult> {
+        console.log(`[MockRobotAPI] Radial movement from ${startDistance.toFixed(2)}m to ${endDistance.toFixed(2)}m at ${angle.toFixed(1)}°`);
+
         // Move to start position first
         const startResult = await this.movePolar(angle, startDistance, speed);
         if (!startResult.success) {
             return startResult;
         }
 
-        // Small delay
-        await this.delay(500);
+        // Small delay (pause for 1 second as per spec)
+        await this.delay(1000);
 
         // Move to end position
         return this.movePolar(angle, endDistance, speed);
@@ -193,7 +215,6 @@ export class RobotAPI extends EventEmitter implements IRobotAPI {
 
     /**
      * Perform tangential boundary test
-     * Moves in an arc at specified radius and angle range
      */
     async performTangentialBoundaryTest(
         radius: number,
@@ -202,6 +223,7 @@ export class RobotAPI extends EventEmitter implements IRobotAPI {
         angleStep: number = 15,
         speed: number = 50
     ): Promise<Position[]> {
+        console.log(`[MockRobotAPI] Tangential boundary test: ${startAngle}° to ${endAngle}° at ${radius.toFixed(2)}m`);
         const positions: Position[] = [];
 
         for (let angle = startAngle; angle <= endAngle; angle += angleStep) {
@@ -217,17 +239,16 @@ export class RobotAPI extends EventEmitter implements IRobotAPI {
 
     /**
      * Perform radial boundary test
-     * Moves toward and away from sensor at various distances
      */
     async performRadialBoundaryTest(
         angle: number,
         distances: number[],
         speed: number = 50
     ): Promise<Position[]> {
+        console.log(`[MockRobotAPI] Radial boundary test at ${angle.toFixed(1)}° for ${distances.length} distances`);
         const positions: Position[] = [];
 
         for (const distance of distances) {
-            // Move to each distance point
             const result = await this.movePolar(angle, distance, speed);
             if (result.success) {
                 positions.push({ ...result.position });
@@ -243,7 +264,7 @@ export class RobotAPI extends EventEmitter implements IRobotAPI {
      */
     async stopMovement(): Promise<void> {
         try {
-            await SerialManager.instance.send("stop");
+            console.log("[MockRobotAPI] Stopping movement");
             this.isMoving = false;
             this.emit("movement_stopped", { position: this.currentPosition });
         } catch (error) {
@@ -307,25 +328,24 @@ export class RobotAPI extends EventEmitter implements IRobotAPI {
     }
 
     /**
-     * Wait for specific response from robot
+     * Calculate distance between two points
      */
-    private waitForResponse(expected: string, timeout: number): Promise<void> {
-        return new Promise((resolve, reject) => {
-            const timer = setTimeout(() => {
-                SerialManager.instance.off("data", handler);
-                reject(new Error(`Timeout waiting for response: ${expected}`));
-            }, timeout);
+    private calculateDistance(x1: number, y1: number, x2: number, y2: number): number {
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
 
-            const handler = (line: string) => {
-                if (line.includes(expected)) {
-                    clearTimeout(timer);
-                    SerialManager.instance.off("data", handler);
-                    resolve();
-                }
-            };
-
-            SerialManager.instance.on("data", handler);
-        });
+    /**
+     * Calculate realistic movement time based on distance and speed
+     * Standard test speed is 0.5 m/s
+     */
+    private calculateMovementTime(distance: number, speed: number): number {
+        // Base calculation: distance / speed * 1000 (convert to ms)
+        // Add some variance for realism
+        const baseTime = (distance / speed) * 1000;
+        const variance = Math.random() * 200 - 100; // ±100ms variance
+        return Math.max(100, baseTime + variance); // Minimum 100ms
     }
 
     /**
@@ -336,7 +356,7 @@ export class RobotAPI extends EventEmitter implements IRobotAPI {
     }
 
     /**
-     * Calculate distance between two points
+     * Static utility methods (matching real RobotAPI)
      */
     static calculateDistance(p1: Position, p2: Position): number {
         const dx = p2.x - p1.x;
@@ -344,9 +364,6 @@ export class RobotAPI extends EventEmitter implements IRobotAPI {
         return Math.sqrt(dx * dx + dy * dy);
     }
 
-    /**
-     * Convert Cartesian to Polar coordinates
-     */
     static cartesianToPolar(x: number, y: number): { angle: number; distance: number } {
         const distance = Math.sqrt(x * x + y * y);
         let angle = (Math.atan2(y, x) * 180) / Math.PI;
@@ -354,9 +371,6 @@ export class RobotAPI extends EventEmitter implements IRobotAPI {
         return { angle, distance };
     }
 
-    /**
-     * Convert Polar to Cartesian coordinates
-     */
     static polarToCartesian(angle: number, distance: number): { x: number; y: number } {
         const radians = (angle * Math.PI) / 180;
         return {
@@ -366,4 +380,4 @@ export class RobotAPI extends EventEmitter implements IRobotAPI {
     }
 }
 
-export default RobotAPI;
+export default MockRobotAPI;

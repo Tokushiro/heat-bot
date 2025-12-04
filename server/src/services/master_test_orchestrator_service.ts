@@ -1,5 +1,8 @@
 import { EventEmitter } from "events";
-import { RobotAPI, Position } from "./robot_api_service";
+import { Position } from "./robot_api_service";
+import { RobotAPIFactory } from "./robot_api_factory";
+import { SensorAPIFactory } from "./sensor_api_factory";
+import { RobotSensorIntegration } from "./robot_sensor_integration";
 import bleEventBus, { DetectionEvent } from "./bleEventBus";
 import * as testService from "./test_service";
 import * as testStepService from "./test_step_service";
@@ -95,25 +98,44 @@ export class MasterTestOrchestrator extends EventEmitter {
      * Start a new test OR resume from saved state
      */
     async startTest(config: MasterTestConfiguration, resuming: boolean = false): Promise<boolean> {
+        console.log("\n" + "=".repeat(80));
+        console.log("🚀 [MasterTest] START TEST CALLED");
+        console.log("=".repeat(80));
+        console.log(`   Test ID: ${config.test_id}`);
+        console.log(`   Sensor ID: ${config.sensor_id}`);
+        console.log(`   Test Type: ${config.test_type}`);
+        console.log(`   Resuming: ${resuming}`);
+        console.log(`   Already Running: ${this.isRunning}`);
+        console.log("=".repeat(80) + "\n");
+
         if (this.isRunning) {
+            console.error("[MasterTest] ❌ Test already running");
             throw new Error("Test already running");
         }
 
         try {
+            console.log("[MasterTest] ✅ Setting test state to RUNNING");
             this.isRunning = true;
             this.currentTest = config;
 
             if (resuming) {
+                console.log("[MasterTest] 📂 Resuming existing test...");
                 await this.resumeExistingTest(config.test_id);
             } else {
+                console.log("[MasterTest] 🆕 Starting new test...");
                 await this.startNewTest(config);
             }
 
+            console.log("[MasterTest] ✅ Test execution completed successfully");
             return true;
 
         } catch (error) {
-            console.error("[MasterTest] Test failed:", error);
-            
+            console.error("\n" + "=".repeat(80));
+            console.error("❌ [MasterTest] TEST FAILED");
+            console.error("=".repeat(80));
+            console.error("[MasterTest] Error:", error);
+            console.error("=".repeat(80) + "\n");
+
             await testService.updateTestStatus(
                 config.test_id,
                 'ERROR',
@@ -126,8 +148,11 @@ export class MasterTestOrchestrator extends EventEmitter {
 
         } finally {
             if (!this.testState?.awaiting_user_confirmation) {
+                console.log("[MasterTest] 🏁 Test finished - Clearing running state");
                 this.isRunning = false;
                 this.currentTest = null;
+            } else {
+                console.log("[MasterTest] ⏸️ Test paused - Awaiting user confirmation");
             }
         }
     }
@@ -136,6 +161,12 @@ export class MasterTestOrchestrator extends EventEmitter {
      * Start a brand new test
      */
     private async startNewTest(config: MasterTestConfiguration): Promise<void> {
+        console.log("\n┌" + "─".repeat(78) + "┐");
+        console.log("│ 🆕 STARTING NEW TEST");
+        console.log("└" + "─".repeat(78) + "┘\n");
+
+        console.log("[MasterTest] Step 1/7: Initializing test state...");
+        this.emit("test_log", { message: "Step 1/7: Initializing test state..." });
         this.sequenceCounter = 0;
 
         this.testState = {
@@ -151,35 +182,122 @@ export class MasterTestOrchestrator extends EventEmitter {
                 current_step: 0
             }
         };
+        console.log("[MasterTest] ✅ Test state initialized");
+        console.log(`   - Total steps for boundary detection: ${this.testState.progress.total_steps}`);
+        this.emit("test_log", { message: `✅ Test state initialized (${this.testState.progress.total_steps} steps)` });
 
+        console.log("\n[MasterTest] Step 2/7: Saving test state to database...");
+        this.emit("test_log", { message: "Step 2/7: Saving test state..." });
         await this.saveTestState();
+        console.log("[MasterTest] ✅ Test state saved");
+        this.emit("test_log", { message: "✅ Test state saved to database" });
+
+        console.log("\n[MasterTest] Step 3/7: Updating test status to IN_PROGRESS...");
+        this.emit("test_log", { message: "Step 3/7: Updating test status..." });
         await testService.updateTestStatus(config.test_id, 'IN_PROGRESS', new Date());
+        console.log("[MasterTest] ✅ Test status updated");
+        this.emit("test_log", { message: "✅ Test status: IN_PROGRESS" });
 
-        this.emit("test_started", { 
-            test_id: config.test_id, 
-            phase: 'BOUNDARY_DETECTION' 
+        console.log("\n[MasterTest] Step 4/7: Emitting test_started event...");
+        this.emit("test_started", {
+            test_id: config.test_id,
+            phase: 'BOUNDARY_DETECTION'
         });
+        console.log("[MasterTest] ✅ Event emitted");
 
-        const initialized = await RobotAPI.instance.initialize();
+        console.log("\n[MasterTest] Step 5/7: Initializing robot...");
+        this.emit("test_log", { message: `Step 5/7: Initializing robot (${RobotAPIFactory.getMode()} mode)...` });
+        const robot = RobotAPIFactory.getInstance();
+        console.log(`   - Robot mode: ${RobotAPIFactory.getMode()}`);
+        const initialized = await robot.initialize();
         if (!initialized) {
             throw new Error("Robot initialization failed");
         }
+        console.log("[MasterTest] ✅ Robot initialized successfully");
+        this.emit("test_log", { message: `✅ Robot initialized (${RobotAPIFactory.getMode()} mode)` });
+
+        console.log("\n[MasterTest] Step 6/7: Initializing sensor...");
+        this.emit("test_log", { message: `Step 6/7: Initializing sensor (${SensorAPIFactory.getMode()} mode)...` });
+        const sensor = SensorAPIFactory.getInstance();
+        console.log(`   - Sensor mode: ${SensorAPIFactory.getMode()}`);
+        console.log(`   - Sensor ID: sensor-${config.sensor_id}`);
+        console.log(`   - MAC Address: ${process.env.BLE_SENSOR_MAC || "00:00:00:00:00:00"}`);
+        const sensorInitialized = await sensor.initialize({
+            sensorId: `sensor-${config.sensor_id}`,
+            mac: process.env.BLE_SENSOR_MAC || "00:00:00:00:00:00",
+            mountingHeight: 1.7,
+            detectionZones: [
+                {
+                    minDistance: 0,
+                    maxDistance: 12,
+                    minAngle: 0,
+                    maxAngle: 360,
+                    detectionProbability: 0.95
+                }
+            ]
+        });
+
+        if (!sensorInitialized) {
+            throw new Error("Sensor initialization failed");
+        }
+        console.log("[MasterTest] ✅ Sensor initialized successfully");
+        this.emit("test_log", { message: `✅ Sensor initialized (${SensorAPIFactory.getMode()} mode)` });
+
+        console.log("\n[MasterTest]    Starting sensor detection...");
+        this.emit("test_log", { message: "Starting sensor detection monitoring..." });
+        await sensor.startDetection();
+        console.log("[MasterTest] ✅ Sensor detection started");
+        this.emit("test_log", { message: "✅ Sensor detection monitoring active" });
+
+        console.log("\n[MasterTest] Step 7/7: Initializing robot-sensor integration...");
+        this.emit("test_log", { message: "Step 7/7: Initializing integration..." });
+        RobotSensorIntegration.instance.initialize();
+        console.log("[MasterTest] ✅ Integration initialized");
+        this.emit("test_log", { message: "✅ Robot-Sensor integration ready" });
+
+        console.log("\n" + "=".repeat(80));
+        console.log("🎯 [MasterTest] STARTING BOUNDARY DETECTION PHASE");
+        console.log("=".repeat(80));
+        console.log(`   Test angles: ${config.boundary_angles.join(', ')}°`);
+        console.log(`   Distance range: ${config.boundary_end_distance}m - ${config.boundary_start_distance}m`);
+        console.log(`   Step size: ${config.boundary_step}m`);
+        console.log(`   Speed: ${config.movement_speed || 50}`);
+        console.log("=".repeat(80) + "\n");
 
         await this.executeBoundaryDetection(config);
-        await this.saveBoundaryResults();
 
+        console.log("\n" + "=".repeat(80));
+        console.log("✅ [MasterTest] BOUNDARY DETECTION PHASE COMPLETE");
+        console.log("=".repeat(80));
+        console.log(`   Detected boundaries at ${this.testState!.boundary_results.length} angles`);
+        console.log("=".repeat(80) + "\n");
+
+        console.log("[MasterTest] Saving boundary results to database...");
+        await this.saveBoundaryResults();
+        console.log("[MasterTest] ✅ Boundary results saved");
+
+        console.log("\n[MasterTest] Setting test phase to awaiting confirmation...");
         this.testState.current_phase = 'BOUNDARY_DETECTION';
         this.testState.awaiting_user_confirmation = true;
         await this.saveTestState();
+        console.log("[MasterTest] ✅ Test state saved");
 
+        console.log("\n[MasterTest] Pausing test and updating status...");
         this.isRunning = false;
         await testService.updateTestStatus(config.test_id, 'PAUSED');
+        console.log("[MasterTest] ✅ Test paused - Awaiting user decision");
 
+        console.log("\n[MasterTest] Emitting boundary_detection_completed event...");
         this.emit("boundary_detection_completed", {
             test_id: config.test_id,
             boundary_results: this.testState.boundary_results,
             message: "Boundary detection complete. Continue with compliance test?"
         });
+        console.log("[MasterTest] ✅ Event emitted");
+
+        console.log("\n" + "=".repeat(80));
+        console.log("⏸️  [MasterTest] TEST PAUSED - WAITING FOR USER DECISION");
+        console.log("=".repeat(80) + "\n");
     }
 
     /**
@@ -204,6 +322,18 @@ export class MasterTestOrchestrator extends EventEmitter {
 
         console.log(`[MasterTest] Resuming at sequence ${this.sequenceCounter}, phase: ${this.testState.current_phase}`);
 
+        // Initialize sensor for resumed test
+        const sensor = SensorAPIFactory.getInstance();
+        await sensor.initialize({
+            sensorId: `sensor-${this.currentTest.sensor_id}`,
+            mac: process.env.BLE_SENSOR_MAC || "00:00:00:00:00:00",
+            mountingHeight: 1.7
+        });
+        await sensor.startDetection();
+
+        // Initialize robot-sensor integration (for mock mode)
+        RobotSensorIntegration.instance.initialize();
+
         // NEW: Move robot to last saved position if available
         if (this.testState.last_position_x !== undefined && this.testState.last_position_y !== undefined) {
             console.log(`[MasterTest] Moving robot to last saved position: (${this.testState.last_position_x}, ${this.testState.last_position_y})`);
@@ -215,7 +345,7 @@ export class MasterTestOrchestrator extends EventEmitter {
                 timestamp: this.testState.last_position_timestamp
             });
 
-            const moveResult = await RobotAPI.instance.moveCartesian(
+            const moveResult = await RobotAPIFactory.getInstance().moveCartesian(
                 this.testState.last_position_x,
                 this.testState.last_position_y,
                 50 // speed
@@ -690,7 +820,7 @@ export class MasterTestOrchestrator extends EventEmitter {
                     attempt 
                 });
 
-                const result = await RobotAPI.instance.movePolar(angle, distance, speed);
+                const result = await RobotAPIFactory.getInstance().movePolar(angle, distance, speed);
 
                 if (!result.success) {
                     throw new Error(`Movement failed: ${result.error}`);
@@ -744,8 +874,8 @@ export class MasterTestOrchestrator extends EventEmitter {
      */
     private async updateRobotPosition(): Promise<void> {
         try {
-            const position = await RobotAPI.instance.getCurrentPosition();
-            
+            const position = await RobotAPIFactory.getInstance().getCurrentPosition();
+
             if (position && this.testState) {
                 this.testState.last_position_x = position.x;
                 this.testState.last_position_y = position.y;
@@ -888,7 +1018,7 @@ export class MasterTestOrchestrator extends EventEmitter {
             await this.saveTestState();
         }
 
-        await RobotAPI.instance.stopMovement();
+        await RobotAPIFactory.getInstance().stopMovement();
         this.emit("test_paused");
     }
 
@@ -911,8 +1041,8 @@ export class MasterTestOrchestrator extends EventEmitter {
             throw new Error("No test is running");
         }
 
-        await RobotAPI.instance.stopMovement();
-        
+        await RobotAPIFactory.getInstance().stopMovement();
+
         if (this.currentTest) {
             // Save position before stopping
             await this.updateRobotPosition();
