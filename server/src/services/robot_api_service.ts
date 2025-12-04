@@ -97,6 +97,13 @@ export class RobotAPI extends EventEmitter {
     }
 
     /**
+     * Move to absolute Cartesian position (alias for moveTo)
+     */
+    async moveCartesian(x: number, y: number, speed: number = 50): Promise<MovementResult> {
+        return this.moveTo(x, y, speed);
+    }
+
+    /**
      * Move to absolute Cartesian position
      */
     async moveTo(x: number, y: number, speed: number = 50): Promise<MovementResult> {
@@ -257,7 +264,7 @@ export class RobotAPI extends EventEmitter {
     /**
      * Get current robot position
      */
-    getCurrentPosition(): Position {
+    async getCurrentPosition(): Promise<Position> {
         return { ...this.currentPosition };
     }
 

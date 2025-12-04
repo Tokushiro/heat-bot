@@ -3,7 +3,7 @@ import { LeftOutlined, CheckCircleOutlined } from "@ant-design/icons";
 import { useNavigate, useLocation, Navigate } from "react-router-dom";
 import type { Test } from "../Types/test.ts"
 import type { TestDB } from "../Components/testCard.tsx";
-import { useMasterTest } from "../Hooks/useMasterTest";
+import { useMasterTest } from "../Hooks/useMasterTest.tsx";
 import { useEffect } from "react";
 
 const { Text, Title } = Typography;
@@ -34,12 +34,11 @@ export default function TestingPattern1() {
 
     const status = data.status ?? 'PLANNED';
     const isCompleted = status === 'COMPLETED';
-    const isInProgress = status === 'IN_PROGRESS';
     const isPaused = status === 'PAUSED';
 
     // Handle resuming from history
     useEffect(() => {
-        if (data.resuming && data.test_id) {
+        if ('resuming' in data && data.resuming && data.test_id) {
             resumeFromState(data.test_id);
         }
     }, []);

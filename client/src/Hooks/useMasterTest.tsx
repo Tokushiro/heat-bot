@@ -249,7 +249,7 @@ export function useMasterTest() {
      */
     const resumeFromState = useCallback(async (test_id: number) => {
         try {
-            const res = await api.post("/api/master-test/resume", { test_id });
+            await api.post("/api/master-test/resume", { test_id });
             message.success("Test state loaded");
             // State will be updated via SSE
         } catch (err: any) {

@@ -63,10 +63,14 @@ export async function continueToCompliance(req: Request, res: Response) {
  */
 export async function resumeFromState(req: Request, res: Response) {
     try {
-        const { test_id } = req.body;
+        const { test_id, config } = req.body;
 
         if (!test_id) {
             return res.status(400).json({ error: "test_id is required" });
+        }
+
+        if (!config) {
+            return res.status(400).json({ error: "config is required to resume test" });
         }
 
         const orchestrator = MasterTestOrchestrator.instance;
@@ -75,10 +79,13 @@ export async function resumeFromState(req: Request, res: Response) {
             return res.status(409).json({ error: "A test is already running" });
         }
 
-        await orchestrator.resumeFromState(test_id);
+        // Resume test asynchronously with the config and resuming flag
+        orchestrator.startTest(config, true).catch((error) => {
+            console.error("[MasterTest] Resume error:", error);
+        });
 
-        return res.status(200).json({ 
-            message: "Test state loaded",
+        return res.status(202).json({
+            message: "Test resuming from saved state",
             test_id
         });
 
@@ -137,6 +144,7 @@ export async function getMasterTestState(req: Request, res: Response) {
  * SSE Stream for real-time test updates
  */
 export function masterTestStream(req: Request, res: Response) {
+
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");

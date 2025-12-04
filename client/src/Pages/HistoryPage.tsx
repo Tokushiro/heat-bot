@@ -1,15 +1,13 @@
 import { useNavigate } from "react-router-dom";
-import { Layout, Typography, Button, Space, Tag, Empty, message, Progress, Collapse, List, Statistic, Row, Col, Divider } from "antd";
+import { Layout, Typography, Button, Space, Tag, Empty, message, Progress, Statistic, Row, Col, Divider } from "antd";
 import { LeftOutlined, PlayCircleOutlined, DownOutlined, CheckCircleOutlined, ClockCircleOutlined, EnvironmentOutlined } from "@ant-design/icons";
-import TestCard, { type TestDB } from "../Components/testCard.tsx";
+import type { TestDB } from "../Components/testCard.tsx";
 import { useEffect, useState } from "react";
 import type {Test} from "../Types/test.ts";
 import { api } from "../Components/apiAxios.ts";
-import moment from "moment";
 
 const { Header, Content } = Layout;
 const { Text, Title } = Typography;
-const { Panel } = Collapse;
 
 interface BoundaryResult {
     angle: number;
@@ -35,6 +33,29 @@ interface TestStepSummary {
     running: number;
     pending: number;
     error: number;
+}
+
+// Utility function to format relative time
+function formatRelativeTime(timestamp: string): string {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+
+    const seconds = Math.floor(diff / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+
+    if (seconds < 60) return 'just now';
+    if (minutes < 60) return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+    if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+    return `${days} day${days > 1 ? 's' : ''} ago`;
+}
+
+// Utility function to format date
+function formatDate(dateInput: Date | string): string {
+    const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 export default function HistoryPage() {
@@ -63,7 +84,7 @@ export default function HistoryPage() {
                         const stateRes = await api.get(`/api/test/${test.test_id}/state`);
 
                         // Fetch test step summary
-                        const stepsRes = await api.get(`/api/test/${test.test_id}/steps/summary`);
+                        await api.get(`/api/test/${test.test_id}/steps/summary`);
 
                         return {
                             ...test,
@@ -337,7 +358,7 @@ export default function HistoryPage() {
                                 <Col span={8}>
                                     <Statistic
                                         title="Last Updated"
-                                        value={item.last_position_timestamp ? moment(item.last_position_timestamp).fromNow() : 'Unknown'}
+                                        value={item.last_position_timestamp ? formatRelativeTime(item.last_position_timestamp) : 'Unknown'}
                                         valueStyle={{ fontSize: 14 }}
                                     />
                                 </Col>
@@ -380,10 +401,10 @@ export default function HistoryPage() {
                         <Text type="secondary">Sensor ID:</Text> <Text>{item.sensor_id}</Text>
                     </Col>
                     <Col span={12}>
-                        <Text type="secondary">Created:</Text> <Text>{moment(item.test_date).format('YYYY-MM-DD HH:mm')}</Text>
+                        <Text type="secondary">Created:</Text> <Text>{formatDate(item.test_date)}</Text>
                     </Col>
                     <Col span={12}>
-                        <Text type="secondary">Status:</Text> <Tag color={getStatusColor(item.status)}>{item.status}</Tag>
+                        <Text type="secondary">Status:</Text> <Tag color={getStatusColor(item.status ?? 'PLANNED')}>{item.status ?? 'PLANNED'}</Tag>
                     </Col>
                 </Row>
             </div>
@@ -483,7 +504,7 @@ export default function HistoryPage() {
                                                                     rotate={isExpanded ? 180 : 0}
                                                                     style={{ transition: 'transform 0.3s' }}
                                                                 />}
-                                                                onClick={() => handleExpand(item.test_id)}
+                                                                onClick={() => handleExpand(item.test_id ?? undefined)}
                                                                 style={{ padding: '4px 8px' }}
                                                             />
                                                             <div>
@@ -492,8 +513,8 @@ export default function HistoryPage() {
                                                                 </Text>
                                                                 <br />
                                                                 <Space size="small">
-                                                                    <Tag color={getStatusColor(item.status)}>
-                                                                        {item.status}
+                                                                    <Tag color={getStatusColor(item.status ?? 'PLANNED')}>
+                                                                        {item.status ?? 'PLANNED'}
                                                                     </Tag>
                                                                     {item.completed_step_count !== undefined && item.completed_step_count > 0 && (
                                                                         <Text type="secondary" style={{ fontSize: 12 }}>
