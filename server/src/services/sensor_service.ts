@@ -93,7 +93,7 @@ export async function processBleDetectionEvent(payload: any): Promise<void> {
         raw,
     };
 
-    // Notify the rest of the system
+
     bleEventBus.emit("detection", event);
 
 
