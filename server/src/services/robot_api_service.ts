@@ -1,11 +1,6 @@
 import { SerialManager } from "./serial_mannager_service"
 import { EventEmitter } from "events";
 
-/**
- * Robot API Service
- * Handles all robot movement commands and position tracking
- */
-
 export interface Position {
     x: number;
     y: number;
