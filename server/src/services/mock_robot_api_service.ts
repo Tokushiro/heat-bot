@@ -17,7 +17,7 @@ export class MockRobotAPI extends EventEmitter implements IRobotAPI {
     private initialized: boolean = false;
 
     // Simulation parameters
-    private readonly DEFAULT_SPEED = 50; // units per second
+    private readonly DEFAULT_SPEED = 50; // Robot API speed units (cm/s: 50 => 0.5 m/s)
     private readonly MOVEMENT_DELAY_PER_METER = 2000; // 2 seconds per meter (0.5 m/s)
     private readonly HOME_TIME = 5000; // 5 seconds to home
     private readonly INIT_TIME = 2000; // 2 seconds to initialize
@@ -341,12 +341,21 @@ export class MockRobotAPI extends EventEmitter implements IRobotAPI {
      * Standard test speed is 0.5 m/s
      */
     private calculateMovementTime(distance: number, speed: number): number {
-        // Base calculation: distance / speed * 1000 (convert to ms)
-        // Add some variance for realism
-        const baseTime = (distance / speed) * 1000;
-        const variance = Math.random() * 200 - 100; // ±100ms variance
-        return Math.max(100, baseTime + variance); // Minimum 100ms
+        // Robot API speed argument is in cm/s (same as the real bot controller)
+        const metersPerSecond = Math.max(speed / 100, 0.01);
+
+        // Base time from provided speed plus a floor that matches the spec 0.5 m/s target
+        const speedBasedTime = (distance / metersPerSecond) * 1000;
+        const specBasedTime = distance * this.MOVEMENT_DELAY_PER_METER;
+
+        // Small variance so timings don't look identical
+        const variance = Math.random() * 400 - 200;
+        const baseTime = Math.max(speedBasedTime, specBasedTime);
+
+        return Math.max(250, baseTime + variance); // Never faster than 250ms
     }
+
+
 
     /**
      * Utility delay function

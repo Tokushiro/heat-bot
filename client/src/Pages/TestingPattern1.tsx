@@ -18,12 +18,14 @@ export default function TestingPattern1() {
 
     const {
         isRunning,
+        isPaused,
         currentPhase,
         boundaryResults,
         awaitingContinuation,
         phaseProgress,
         events,
         connected,
+        status,
         startTest,
         continueToCompliance,
         resumeFromState,
@@ -32,9 +34,8 @@ export default function TestingPattern1() {
         stopTest
     } = useMasterTest();
 
-    const status = data.status ?? 'PLANNED';
-    const isCompleted = status === 'COMPLETED';
-    const isPaused = status === 'PAUSED';
+    const liveStatus = status || data.status || 'PLANNED';
+    const isCompleted = liveStatus === 'COMPLETED';
     const [confirmModalOpen, setConfirmModalOpen] = useState(false);
 
     // Debug logging
@@ -47,12 +48,12 @@ export default function TestingPattern1() {
         console.log("isCompleted:", isCompleted);
         console.log("awaitingContinuation:", awaitingContinuation);
         console.log("connected:", connected);
-        console.log("status:", status);
+        console.log("status:", liveStatus);
         console.log("data:", data);
         console.log("Button should show:", !isRunning && !isPaused && !awaitingContinuation);
         console.log("Button should be enabled:", !isCompleted);
         console.log("=".repeat(60));
-    }, [isRunning, isPaused, isCompleted, awaitingContinuation, connected, status, data]);
+    }, [isRunning, isPaused, isCompleted, awaitingContinuation, connected, liveStatus, data]);
 
     // Handle resuming from history
     useEffect(() => {
@@ -62,7 +63,7 @@ export default function TestingPattern1() {
     }, []);
 
     const getStatusColor = () => {
-        switch (status) {
+        switch (liveStatus) {
             case 'COMPLETED': return 'green';
             case 'IN_PROGRESS': return 'blue';
             case 'ERROR': return 'red';
@@ -73,7 +74,7 @@ export default function TestingPattern1() {
     };
 
     const getStatusDisplay = () => {
-        switch (status) {
+        switch (liveStatus) {
             case 'IN_PROGRESS': return 'In Progress';
             case 'COMPLETED': return 'Completed';
             case 'ERROR': return 'Error';

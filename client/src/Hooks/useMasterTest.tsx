@@ -3,6 +3,7 @@ import { api } from "../Components/apiAxios";
 import { message, Modal } from "antd";
 
 export type TestPhase = 'BOUNDARY_DETECTION' | 'COMPLIANCE_TEST' | 'COMPLETED';
+type TestStatus = 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'PAUSED' | 'ERROR';
 
 export interface MasterTestConfiguration {
     test_id: number;
@@ -45,10 +46,12 @@ export interface TestEvent {
 
 export function useMasterTest() {
     const [isRunning, setIsRunning] = useState(false);
+    const [isPaused, setIsPaused] = useState(false);
     const [currentPhase, setCurrentPhase] = useState<TestPhase | null>(null);
     const [testState, setTestState] = useState<TestState | null>(null);
     const [boundaryResults, setBoundaryResults] = useState<BoundaryResult[]>([]);
     const [awaitingContinuation, setAwaitingContinuation] = useState(false);
+    const [status, setStatus] = useState<TestStatus>('PLANNED');
     const [events, setEvents] = useState<TestEvent[]>([]);
     const [connected, setConnected] = useState(false);
     const [phaseProgress, setPhaseProgress] = useState<any>(null);
@@ -69,7 +72,9 @@ export function useMasterTest() {
         eventSource.addEventListener("test_started", (e) => {
             const data = JSON.parse(e.data);
             setIsRunning(true);
+            setIsPaused(false);
             setCurrentPhase(data.phase);
+            setStatus('IN_PROGRESS');
             addEvent("test_started", data);
             message.success(`Test ${data.test_id} started - Phase: ${data.phase}`);
         });
@@ -77,8 +82,10 @@ export function useMasterTest() {
         eventSource.addEventListener("boundary_detection_completed", (e) => {
             const data = JSON.parse(e.data);
             setIsRunning(false);
+            setIsPaused(false);
             setBoundaryResults(data.boundary_results);
             setAwaitingContinuation(true);
+            setStatus('PAUSED');
             addEvent("boundary_detection_completed", data);
             
             // Show modal asking user to continue
@@ -90,6 +97,8 @@ export function useMasterTest() {
             setIsRunning(true);
             setCurrentPhase('COMPLIANCE_TEST');
             setAwaitingContinuation(false);
+            setIsPaused(false);
+            setStatus('IN_PROGRESS');
             addEvent("compliance_test_started", data);
             message.success("Starting compliance test phase");
         });
@@ -98,6 +107,8 @@ export function useMasterTest() {
             const data = JSON.parse(e.data);
             setIsRunning(false);
             setCurrentPhase('COMPLETED');
+            setIsPaused(false);
+            setStatus('COMPLETED');
             addEvent("test_completed", data);
             message.success(`Test ${data.test_id} completed successfully!`);
         });
@@ -105,22 +116,33 @@ export function useMasterTest() {
         eventSource.addEventListener("test_failed", (e) => {
             const data = JSON.parse(e.data);
             setIsRunning(false);
+            setIsPaused(false);
+            setStatus('ERROR');
             addEvent("test_failed", data);
             message.error(`Test failed: ${data.error}`);
         });
 
         eventSource.addEventListener("test_paused", () => {
+            setIsPaused(true);
+            setIsRunning(false);
+            setStatus('PAUSED');
             addEvent("test_paused", {});
             message.info("Test paused");
         });
 
         eventSource.addEventListener("test_resumed", () => {
+            setIsPaused(false);
+            setIsRunning(true);
+            setStatus('IN_PROGRESS');
             addEvent("test_resumed", {});
             message.info("Test resumed");
         });
 
         eventSource.addEventListener("test_stopped", () => {
             setIsRunning(false);
+            setIsPaused(false);
+            setAwaitingContinuation(false);
+            setStatus('PAUSED');
             addEvent("test_stopped", {});
             message.info("Test stopped");
         });
@@ -316,12 +338,23 @@ export function useMasterTest() {
         try {
             const res = await api.get<{ 
                 is_running: boolean; 
+                is_paused: boolean;
                 current_test: MasterTestConfiguration | null;
                 state: TestState | null;
             }>("/api/master-test/state");
             
             setIsRunning(res.data.is_running);
+            setIsPaused(res.data.is_paused);
             setTestState(res.data.state);
+            if (res.data.state?.current_phase === 'COMPLETED') {
+                setStatus('COMPLETED');
+            } else if (res.data.is_running) {
+                setStatus('IN_PROGRESS');
+            } else if (res.data.is_paused || res.data.state) {
+                setStatus('PAUSED');
+            } else {
+                setStatus('PLANNED');
+            }
             
             if (res.data.state) {
                 setCurrentPhase(res.data.state.current_phase);
@@ -352,10 +385,12 @@ export function useMasterTest() {
 
     return {
         isRunning,
+        isPaused,
         currentPhase,
         testState,
         boundaryResults,
         awaitingContinuation,
+        status,
         phaseProgress,
         events,
         connected,

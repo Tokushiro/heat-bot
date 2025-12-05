@@ -8,6 +8,13 @@ import * as testService from "./test_service";
 import * as testStepService from "./test_step_service";
 import pool from "../db_conn";
 
+class StopRequestedError extends Error {
+    constructor() {
+        super("STOP_REQUESTED");
+        this.name = "StopRequestedError";
+    }
+}
+
 export type TestPhase = 'BOUNDARY_DETECTION' | 'COMPLIANCE_TEST' | 'COMPLETED';
 export type TestType = 'RADIAL' | 'TANGENTIAL' | 'FULL';
 
@@ -69,6 +76,7 @@ export class MasterTestOrchestrator extends EventEmitter {
     private detectionBuffer: DetectionEvent[] = [];
     private isRunning: boolean = false;
     private isPaused: boolean = false;
+    private stopRequested: boolean = false;
     private sequenceCounter: number = 0;
 
     static get instance() {
@@ -116,6 +124,8 @@ export class MasterTestOrchestrator extends EventEmitter {
         try {
             console.log("[MasterTest] ✅ Setting test state to RUNNING");
             this.isRunning = true;
+            this.isPaused = false;
+            this.stopRequested = false;
             this.currentTest = config;
 
             if (resuming) {
@@ -130,6 +140,11 @@ export class MasterTestOrchestrator extends EventEmitter {
             return true;
 
         } catch (error) {
+            if (error instanceof StopRequestedError) {
+                console.warn("[MasterTest] Test stopped by user");
+                return false;
+            }
+
             console.error("\n" + "=".repeat(80));
             console.error("❌ [MasterTest] TEST FAILED");
             console.error("=".repeat(80));
@@ -427,6 +442,7 @@ export class MasterTestOrchestrator extends EventEmitter {
 
         for (let i = 0; i < angles.length; i++) {
             const angle = angles[i];
+            this.ensureNotStopped();
             
             const existingResult = this.testState!.boundary_results.find(r => r.angle === angle);
             if (existingResult) {
@@ -435,6 +451,7 @@ export class MasterTestOrchestrator extends EventEmitter {
             }
             
             if (this.isPaused) await this.waitForResume();
+            this.ensureNotStopped();
 
             const boundaryResult = await this.findBoundaryAtAngle(
                 config.test_id,
@@ -487,6 +504,7 @@ export class MasterTestOrchestrator extends EventEmitter {
         });
 
         for (const boundary of boundaries) {
+            this.ensureNotStopped();
             if (boundary.detection_boundary === null) {
                 console.warn(`No boundary found at angle ${boundary.angle}, skipping compliance test`);
                 continue;
@@ -494,6 +512,7 @@ export class MasterTestOrchestrator extends EventEmitter {
 
             for (const offsetDistance of testDistances) {
                 if (this.isPaused) await this.waitForResume();
+                this.ensureNotStopped();
 
                 const testDistance = boundary.detection_boundary + offsetDistance;
 
@@ -556,8 +575,10 @@ export class MasterTestOrchestrator extends EventEmitter {
 
         for (let i = 0; i < angles.length; i++) {
             const angle = angles[i];
+            this.ensureNotStopped();
             
             if (this.isPaused) await this.waitForResume();
+            this.ensureNotStopped();
 
             const boundaryResult = await this.findBoundaryAtAngle(
                 config.test_id,
@@ -606,7 +627,9 @@ export class MasterTestOrchestrator extends EventEmitter {
         let noDetectionDistance: number | null = null;
 
         for (let distance = startDistance; distance >= endDistance; distance -= step) {
+            this.ensureNotStopped();
             if (this.isPaused) await this.waitForResume();
+            this.ensureNotStopped();
 
             const alreadyDone = skipMeasurements.some(
                 m => Math.abs(m.distance - distance) < 0.01 && m.status === 'COMPLETED'
@@ -672,6 +695,7 @@ export class MasterTestOrchestrator extends EventEmitter {
         let completedCount = 0;
 
         for (const boundary of boundaries) {
+            this.ensureNotStopped();
             if (boundary.detection_boundary === null) {
                 console.warn(`No boundary found at angle ${boundary.angle}, skipping compliance test`);
                 continue;
@@ -679,6 +703,7 @@ export class MasterTestOrchestrator extends EventEmitter {
 
             for (const offsetDistance of testDistances) {
                 if (this.isPaused) await this.waitForResume();
+                this.ensureNotStopped();
 
                 const testDistance = boundary.detection_boundary + offsetDistance;
 
@@ -758,6 +783,7 @@ export class MasterTestOrchestrator extends EventEmitter {
     ): Promise<void> {
         for (let angle = 0; angle < 360; angle += angleStep) {
             if (this.isPaused) await this.waitForResume();
+            this.ensureNotStopped();
 
             await this.testPositionWithRepeats(
                 test_id,
@@ -784,6 +810,7 @@ export class MasterTestOrchestrator extends EventEmitter {
         const measurements: boolean[] = [];
 
         for (let attempt = 1; attempt <= repeatCount; attempt++) {
+            this.ensureNotStopped();
             const stepId = await testStepService.insertTestStep({
                 test_step_id: null,
                 test_id,
@@ -827,6 +854,7 @@ export class MasterTestOrchestrator extends EventEmitter {
                 }
 
                 await this.delay(waitTime);
+                this.ensureNotStopped();
 
                 const detected = this.detectionBuffer.some(e => e.detected);
                 measurements.push(detected);
@@ -906,6 +934,8 @@ export class MasterTestOrchestrator extends EventEmitter {
 
         try {
             this.isRunning = true;
+            this.isPaused = false;
+            this.stopRequested = false;
             this.testState.awaiting_user_confirmation = false;
             this.testState.current_phase = 'COMPLIANCE_TEST';
             this.testState.progress.phase = 'COMPLIANCE_TEST';
@@ -934,6 +964,10 @@ export class MasterTestOrchestrator extends EventEmitter {
             return true;
 
         } catch (error) {
+            if (error instanceof StopRequestedError) {
+                console.warn("[MasterTest] Compliance test stopped by user");
+                return false;
+            }
             console.error("[MasterTest] Compliance test failed:", error);
             
             await testService.updateTestStatus(
@@ -1041,6 +1075,7 @@ export class MasterTestOrchestrator extends EventEmitter {
             throw new Error("No test is running");
         }
 
+        this.stopRequested = true;
         await RobotAPIFactory.getInstance().stopMovement();
 
         if (this.currentTest) {
@@ -1147,10 +1182,16 @@ export class MasterTestOrchestrator extends EventEmitter {
         return this.testState;
     }
 
+    private ensureNotStopped(): void {
+        if (this.stopRequested) {
+            throw new StopRequestedError();
+        }
+    }
+
     private async waitForResume(): Promise<void> {
         return new Promise((resolve) => {
             const check = () => {
-                if (!this.isPaused) resolve();
+                if (!this.isPaused || this.stopRequested) resolve();
                 else setTimeout(check, 100);
             };
             check();
@@ -1159,6 +1200,10 @@ export class MasterTestOrchestrator extends EventEmitter {
 
     private delay(ms: number): Promise<void> {
         return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    isTestPaused(): boolean {
+        return this.isPaused;
     }
 
     isTestRunning(): boolean {

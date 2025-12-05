@@ -147,10 +147,12 @@ export async function getMasterTestState(req: Request, res: Response) {
     const orchestrator = MasterTestOrchestrator.instance;
     const state = orchestrator.getTestState();
     const isRunning = orchestrator.isTestRunning();
+    const isPaused = orchestrator.isTestPaused();
     const currentTest = orchestrator.getCurrentTest();
 
     return res.status(200).json({
         is_running: isRunning,
+        is_paused: isPaused,
         current_test: currentTest,
         state: state
     });
