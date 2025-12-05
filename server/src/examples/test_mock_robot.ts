@@ -13,7 +13,7 @@ import * as path from "path";
 // Load .env from project root
 dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 
-import { RobotAPIFactory } from "../services/robot_api_factory";
+import { RobotAPIFactory } from "../api/factories/RobotAPIFactory";
 
 async function testMockRobot() {
     console.log("\n" + "=".repeat(60));

@@ -36,6 +36,10 @@ export interface TestState {
     current_phase: TestPhase;
     boundary_results: BoundaryResult[];
     awaiting_user_confirmation: boolean;
+    awaiting_test_selection?: boolean;
+    boundary_detection_completed?: boolean;
+    tangential_test_completed?: boolean;
+    radial_test_completed?: boolean;
 }
 
 export interface TestEvent {
@@ -56,6 +60,11 @@ export function useMasterTest() {
     const [connected, setConnected] = useState(false);
     const [phaseProgress, setPhaseProgress] = useState<any>(null);
     const eventSourceRef = useRef<EventSource | null>(null);
+
+    // Phase completion tracking
+    const [boundaryDetectionCompleted, setBoundaryDetectionCompleted] = useState(false);
+    const [tangentialTestCompleted, setTangentialTestCompleted] = useState(false);
+    const [radialTestCompleted, setRadialTestCompleted] = useState(false);
 
     /**
      * Connect to SSE stream
@@ -84,10 +93,16 @@ export function useMasterTest() {
             setIsRunning(false);
             setIsPaused(false);
             setBoundaryResults(data.boundary_results);
+            setBoundaryDetectionCompleted(true);
             setAwaitingContinuation(true);
             setStatus('PAUSED');
+
+            // Track phase completions from event data
+            if (data.tangential_completed) setTangentialTestCompleted(true);
+            if (data.radial_completed) setRadialTestCompleted(true);
+
             addEvent("boundary_detection_completed", data);
-            
+
             // Show modal asking user to continue
             showContinuationModal(data);
         });
@@ -130,6 +145,11 @@ export function useMasterTest() {
             setIsRunning(false);
             setAwaitingContinuation(true);
             setStatus('PAUSED');
+
+            // Track phase completions
+            if (data.tangential_completed) setTangentialTestCompleted(true);
+            if (data.radial_completed) setRadialTestCompleted(true);
+
             addEvent("phase_completed_awaiting_next", data);
 
             // Show modal for next test
@@ -392,7 +412,12 @@ export function useMasterTest() {
                     const results = JSON.parse(stateRes.data.boundary_results);
                     setBoundaryResults(results);
                 }
-                setAwaitingContinuation(stateRes.data.awaiting_confirmation || false);
+                setAwaitingContinuation(stateRes.data.awaiting_confirmation || stateRes.data.awaiting_test_selection || false);
+
+                // Set phase completion status
+                setBoundaryDetectionCompleted(stateRes.data.boundary_detection_completed || false);
+                setTangentialTestCompleted(stateRes.data.tangential_test_completed || false);
+                setRadialTestCompleted(stateRes.data.radial_test_completed || false);
 
                 // Set phase progress
                 if (stateRes.data.current_phase === 'BOUNDARY_DETECTION' || stateRes.data.boundary_results) {
@@ -547,6 +572,9 @@ export function useMasterTest() {
         phaseProgress,
         events,
         connected,
+        boundaryDetectionCompleted,
+        tangentialTestCompleted,
+        radialTestCompleted,
         startTest,
         startTestPhase,
         continueToCompliance,

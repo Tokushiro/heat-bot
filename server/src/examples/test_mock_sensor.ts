@@ -13,8 +13,8 @@ import * as path from "path";
 // Load .env from project root
 dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 
-import { SensorAPIFactory } from "../services/sensor_api_factory";
-import { MockSensorAPI } from "../services/mock_sensor_api_service";
+import { SensorAPIFactory } from "../api/factories/SensorAPIFactory";
+import { MockSensorAPI } from "../api/implementations/mock/MockSensorAPI";
 
 async function testMockSensor() {
     console.log("\n" + "=".repeat(60));

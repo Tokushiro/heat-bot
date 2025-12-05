@@ -63,8 +63,10 @@ export default function TestingPattern1() {
         events,
         connected,
         status,
+        tangentialTestCompleted,
+        radialTestCompleted,
         startTest,
-        continueToCompliance,
+        startTestPhase,
         resumeFromState,
         loadTestHistory,
         pauseTest,
@@ -133,7 +135,6 @@ export default function TestingPattern1() {
         if (currentPhase === 'BOUNDARY_DETECTION') return 'Phase 1: ' + formattedPhase;
         if (currentPhase === 'TANGENTIAL_TEST') return 'Phase 2: Tangential Test';
         if (currentPhase === 'RADIAL_TEST') return 'Phase 3: Radial Test';
-        if (currentPhase === 'COMPLIANCE_TEST') return 'Phase 2: Tangential/Radial Test'; // Legacy
         if (currentPhase === 'COMPLETED') return 'Test Completed';
         return formattedPhase;
     };
@@ -143,7 +144,6 @@ export default function TestingPattern1() {
             case 'BOUNDARY_DETECTION': return 'blue';
             case 'TANGENTIAL_TEST': return 'purple';
             case 'RADIAL_TEST': return 'orange';
-            case 'COMPLIANCE_TEST': return 'purple'; // Legacy
             case 'COMPLETED': return 'green';
             default: return 'default';
         }
@@ -237,13 +237,23 @@ export default function TestingPattern1() {
         }
     };
 
-    const handleContinue = async () => {
-        console.log("➡️ Continue button clicked");
+    const handleStartTangential = async () => {
+        console.log("➡️ Start Tangential Test clicked");
         try {
-            await continueToCompliance();
-            console.log("✅ Continuing to compliance test");
+            await startTestPhase('TANGENTIAL');
+            console.log("✅ Starting tangential test");
         } catch (error) {
-            console.error("❌ Failed to continue:", error);
+            console.error("❌ Failed to start tangential test:", error);
+        }
+    };
+
+    const handleStartRadial = async () => {
+        console.log("➡️ Start Radial Test clicked");
+        try {
+            await startTestPhase('RADIAL');
+            console.log("✅ Starting radial test");
+        } catch (error) {
+            console.error("❌ Failed to start radial test:", error);
         }
     };
 
@@ -297,9 +307,24 @@ export default function TestingPattern1() {
                             </Button>
                         )}
                         {awaitingContinuation && (
-                            <Button type="primary" onClick={handleContinue}>
-                                Continue to Tangential/Radial Test
-                            </Button>
+                            <Space>
+                                <Button
+                                    type="primary"
+                                    onClick={handleStartTangential}
+                                    disabled={tangentialTestCompleted}
+                                    icon={tangentialTestCompleted ? <CheckCircleOutlined /> : undefined}
+                                >
+                                    {tangentialTestCompleted ? '✓ Tangential Complete' : 'Start Tangential Test'}
+                                </Button>
+                                <Button
+                                    type="primary"
+                                    onClick={handleStartRadial}
+                                    disabled={radialTestCompleted}
+                                    icon={radialTestCompleted ? <CheckCircleOutlined /> : undefined}
+                                >
+                                    {radialTestCompleted ? '✓ Radial Complete' : 'Start Radial Test'}
+                                </Button>
+                            </Space>
                         )}
                         {isRunning && !isPaused && (
                             <>
