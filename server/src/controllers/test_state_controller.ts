@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import * as testStateService from "../services/test_state_service";
+import * as testService from "../services/test_service";
 
 /**
  * Get test step summary for a specific test
@@ -72,8 +73,48 @@ export async function getTestSteps(req: Request, res: Response) {
 
     } catch (error: any) {
         console.error("Error fetching test steps:", error);
-        return res.status(500).json({ 
-            error: error.message || "Failed to fetch test steps" 
+        return res.status(500).json({
+            error: error.message || "Failed to fetch test steps"
+        });
+    }
+}
+
+/**
+ * Export complete test data for CSV generation
+ * Returns test info, state, steps, and boundary results
+ */
+export async function exportTestData(req: Request, res: Response) {
+    try {
+        const testId = parseInt(req.params.testId);
+
+        if (isNaN(testId)) {
+            return res.status(400).json({ error: "Invalid testId" });
+        }
+
+        // Fetch all test data
+        const test = await testService.getTestById(testId);
+        if (!test) {
+            return res.status(404).json({ error: "Test not found" });
+        }
+
+        const state = await testStateService.getTestState(testId);
+        const steps = await testStateService.getTestSteps(testId);
+        const summary = await testStateService.getTestStepSummary(testId);
+
+        // Combine all data
+        const exportData = {
+            test,
+            state,
+            steps,
+            summary
+        };
+
+        return res.status(200).json(exportData);
+
+    } catch (error: any) {
+        console.error("Error exporting test data:", error);
+        return res.status(500).json({
+            error: error.message || "Failed to export test data"
         });
     }
 }

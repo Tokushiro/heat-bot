@@ -2,9 +2,13 @@ import { Request, Response } from "express";
 import { insertTest, getAllTests, updateTestStatus, deleteTest, getTestById } from '../services/test_service';
 
 export async function createTest(req: Request, res: Response) {
-    await insertTest(req.body);
-    console.log(`Got request ${req.body}`);
-    return res.status(204).send();
+    const test_id = await insertTest(req.body);
+    console.log(`Created test with ID ${test_id}`);
+    return res.status(201).json({
+        test_id,
+        ...req.body,
+        status: req.body.status || 'PLANNED'
+    });
 }
 
 export async function listTests(_req: Request, res: Response) {

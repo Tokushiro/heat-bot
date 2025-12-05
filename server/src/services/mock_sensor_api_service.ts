@@ -52,13 +52,14 @@ export class MockSensorAPI extends EventEmitter implements ISensorAPI {
             console.log(`[MockSensor] Initializing mock sensor: ${config.sensorId} (${config.mac})`);
 
             // Set default detection zones if not provided
+            // More realistic detection range: 1m-10m with distance-based probability
             const defaultZones: DetectionZoneConfig[] = config.detectionZones || [
                 {
-                    minDistance: 0,
-                    maxDistance: 12,      // Typical PIR sensor range
+                    minDistance: 1,
+                    maxDistance: 10,      // Realistic PIR detection range (1-10m)
                     minAngle: 0,
                     maxAngle: 360,        // Full 360° coverage
-                    detectionProbability: 0.95  // 95% detection probability in zone
+                    detectionProbability: 0.80  // Base 80% detection probability
                 }
             ];
 
@@ -144,6 +145,7 @@ export class MockSensorAPI extends EventEmitter implements ISensorAPI {
         // Check if position is within any detection zone
         let inZone = false;
         let zoneConfidence = 0;
+        let matchedZone: DetectionZoneConfig | null = null;
 
         for (const zone of this.detectionZones) {
             const inDistanceRange = distance >= zone.minDistance && distance <= zone.maxDistance;
@@ -151,13 +153,33 @@ export class MockSensorAPI extends EventEmitter implements ISensorAPI {
 
             if (inDistanceRange && inAngleRange) {
                 inZone = true;
-                zoneConfidence = zone.detectionProbability || 0.95;
+                matchedZone = zone;
+                zoneConfidence = zone.detectionProbability || 0.80;
                 break;
             }
         }
 
-        // Simulate probabilistic detection
-        const detected = inZone && Math.random() < zoneConfidence;
+        // Apply distance-based probability falloff for more realistic detection
+        // Detection probability decreases with distance
+        let finalProbability = zoneConfidence;
+        if (inZone && matchedZone) {
+            const distanceRange = matchedZone.maxDistance - matchedZone.minDistance;
+            const relativeDistance = (distance - matchedZone.minDistance) / distanceRange;
+
+            // Probability decreases linearly from 100% at minDistance to 60% at maxDistance
+            const distanceFactor = 1.0 - (relativeDistance * 0.4);
+            finalProbability = zoneConfidence * distanceFactor;
+
+            // Add some random variation (±10%) to make it more realistic
+            const randomVariation = 0.9 + (Math.random() * 0.2); // 0.9 to 1.1
+            finalProbability *= randomVariation;
+
+            // Clamp between 0 and 1
+            finalProbability = Math.max(0, Math.min(1, finalProbability));
+        }
+
+        // Simulate probabilistic detection with improved realism
+        const detected = inZone && Math.random() < finalProbability;
         const timestamp = new Date().toISOString();
 
         // Generate mock raw data (simulating BLE payload)
@@ -167,7 +189,7 @@ export class MockSensorAPI extends EventEmitter implements ISensorAPI {
             detected,
             timestamp,
             raw,
-            confidence: inZone ? zoneConfidence : 0
+            confidence: inZone ? finalProbability : 0
             // NOTE: distance and angle are NOT included - these are calculated by test system
         };
 
@@ -180,7 +202,9 @@ export class MockSensorAPI extends EventEmitter implements ISensorAPI {
 
         if (detected) {
             this.lastDetection = timestamp;
-            console.log(`[MockSensor] 🎯 DETECTION at (${x.toFixed(2)}, ${y.toFixed(2)}) - Distance: ${distance.toFixed(2)}m, Angle: ${angle.toFixed(1)}°`);
+            console.log(`[MockSensor] 🎯 DETECTION at (${x.toFixed(2)}, ${y.toFixed(2)}) - Distance: ${distance.toFixed(2)}m, Angle: ${angle.toFixed(1)}°, Probability: ${(finalProbability * 100).toFixed(1)}%`);
+        } else if (inZone) {
+            console.log(`[MockSensor] ❌ NO DETECTION at (${x.toFixed(2)}, ${y.toFixed(2)}) - Distance: ${distance.toFixed(2)}m, Angle: ${angle.toFixed(1)}°, Probability: ${(finalProbability * 100).toFixed(1)}% (failed)`);
         }
 
         bleEventBus.emit("detection", bleEvent);

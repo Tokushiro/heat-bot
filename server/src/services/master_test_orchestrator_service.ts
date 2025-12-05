@@ -15,7 +15,7 @@ class StopRequestedError extends Error {
     }
 }
 
-export type TestPhase = 'BOUNDARY_DETECTION' | 'COMPLIANCE_TEST' | 'COMPLETED';
+export type TestPhase = 'BOUNDARY_DETECTION' | 'TANGENTIAL_TEST' | 'RADIAL_TEST' | 'COMPLETED';
 export type TestType = 'RADIAL' | 'TANGENTIAL' | 'FULL';
 
 export interface BoundaryResult {
@@ -49,17 +49,23 @@ export interface TestState {
     current_phase: TestPhase;
     boundary_results: BoundaryResult[];
     awaiting_user_confirmation: boolean;
-    
+    awaiting_test_selection?: boolean; // Waiting for user to choose tangential/radial
+
+    // Track completed phases
+    boundary_detection_completed: boolean;
+    tangential_test_completed: boolean;
+    radial_test_completed: boolean;
+
     // Resume information
     last_completed_angle?: number;
     last_completed_distance?: number;
     completed_step_count: number;
-    
+
     // Physical position tracking
     last_position_x?: number;
     last_position_y?: number;
     last_position_timestamp?: Date;
-    
+
     progress: {
         phase: TestPhase;
         total_steps: number;
@@ -189,6 +195,10 @@ export class MasterTestOrchestrator extends EventEmitter {
             current_phase: 'BOUNDARY_DETECTION',
             boundary_results: [],
             awaiting_user_confirmation: false,
+            awaiting_test_selection: false,
+            boundary_detection_completed: false,
+            tangential_test_completed: false,
+            radial_test_completed: false,
             completed_step_count: 0,
             progress: {
                 phase: 'BOUNDARY_DETECTION',
@@ -270,16 +280,30 @@ export class MasterTestOrchestrator extends EventEmitter {
         console.log("[MasterTest] ✅ Integration initialized");
         this.emit("test_log", { message: "✅ Robot-Sensor integration ready" });
 
-        console.log("\n" + "=".repeat(80));
-        console.log("🎯 [MasterTest] STARTING BOUNDARY DETECTION PHASE");
-        console.log("=".repeat(80));
-        console.log(`   Test angles: ${config.boundary_angles.join(', ')}°`);
-        console.log(`   Distance range: ${config.boundary_end_distance}m - ${config.boundary_start_distance}m`);
-        console.log(`   Step size: ${config.boundary_step}m`);
-        console.log(`   Speed: ${config.movement_speed || 50}`);
-        console.log("=".repeat(80) + "\n");
+        // Check if boundary detection is already complete
+        const existingState = await this.loadTestState(config.test_id);
+        if (existingState && existingState.boundary_results && existingState.boundary_results.length > 0) {
+            console.log("\n" + "=".repeat(80));
+            console.log("⏩ [MasterTest] BOUNDARY DETECTION ALREADY COMPLETE");
+            console.log("=".repeat(80));
+            console.log(`   Found ${existingState.boundary_results.length} existing boundary results`);
+            console.log("   Skipping boundary detection phase");
+            console.log("=".repeat(80) + "\n");
 
-        await this.executeBoundaryDetection(config);
+            this.testState!.boundary_results = existingState.boundary_results;
+            this.emit("test_log", { message: `Boundary detection already complete (${existingState.boundary_results.length} angles detected)` });
+        } else {
+            console.log("\n" + "=".repeat(80));
+            console.log("🎯 [MasterTest] STARTING BOUNDARY DETECTION PHASE");
+            console.log("=".repeat(80));
+            console.log(`   Test angles: ${config.boundary_angles.join(', ')}°`);
+            console.log(`   Distance range: ${config.boundary_end_distance}m - ${config.boundary_start_distance}m`);
+            console.log(`   Step size: ${config.boundary_step}m`);
+            console.log(`   Speed: ${config.movement_speed || 50}`);
+            console.log("=".repeat(80) + "\n");
+
+            await this.executeBoundaryDetection(config);
+        }
 
         console.log("\n" + "=".repeat(80));
         console.log("✅ [MasterTest] BOUNDARY DETECTION PHASE COMPLETE");
@@ -291,27 +315,31 @@ export class MasterTestOrchestrator extends EventEmitter {
         await this.saveBoundaryResults();
         console.log("[MasterTest] ✅ Boundary results saved");
 
-        console.log("\n[MasterTest] Setting test phase to awaiting confirmation...");
+        console.log("\n[MasterTest] Setting test phase to awaiting test selection...");
         this.testState.current_phase = 'BOUNDARY_DETECTION';
-        this.testState.awaiting_user_confirmation = true;
+        this.testState.boundary_detection_completed = true;
+        this.testState.awaiting_test_selection = true;
+        this.testState.awaiting_user_confirmation = false;
         await this.saveTestState();
         console.log("[MasterTest] ✅ Test state saved");
 
         console.log("\n[MasterTest] Pausing test and updating status...");
         this.isRunning = false;
         await testService.updateTestStatus(config.test_id, 'PAUSED');
-        console.log("[MasterTest] ✅ Test paused - Awaiting user decision");
+        console.log("[MasterTest] ✅ Test paused - Awaiting user test selection");
 
         console.log("\n[MasterTest] Emitting boundary_detection_completed event...");
         this.emit("boundary_detection_completed", {
             test_id: config.test_id,
             boundary_results: this.testState.boundary_results,
-            message: "Boundary detection complete. Continue with compliance test?"
+            message: "Boundary detection complete. Choose which test to run first:",
+            tangential_completed: this.testState.tangential_test_completed,
+            radial_completed: this.testState.radial_test_completed
         });
         console.log("[MasterTest] ✅ Event emitted");
 
         console.log("\n" + "=".repeat(80));
-        console.log("⏸️  [MasterTest] TEST PAUSED - WAITING FOR USER DECISION");
+        console.log("⏸️  [MasterTest] TEST PAUSED - AWAITING TEST SELECTION");
         console.log("=".repeat(80) + "\n");
     }
 
@@ -391,40 +419,55 @@ export class MasterTestOrchestrator extends EventEmitter {
             }
         });
 
-        if (this.testState.awaiting_user_confirmation) {
+        if (this.testState.awaiting_test_selection) {
             this.isRunning = false;
             await testService.updateTestStatus(test_id, 'PAUSED');
-            
+
             this.emit("boundary_detection_completed", {
                 test_id: test_id,
                 boundary_results: this.testState.boundary_results,
-                message: "Boundary detection was completed earlier. Continue with compliance test?"
+                message: "Boundary detection was completed earlier. Choose which test to run:",
+                tangential_completed: this.testState.tangential_test_completed,
+                radial_completed: this.testState.radial_test_completed
             });
-            
+
+        } else if (this.testState.awaiting_user_confirmation) {
+            // Legacy: awaiting to continue to next phase
+            this.isRunning = false;
+            await testService.updateTestStatus(test_id, 'PAUSED');
+
+            this.emit("boundary_detection_completed", {
+                test_id: test_id,
+                boundary_results: this.testState.boundary_results,
+                message: "Boundary detection was completed earlier. Choose which test to run:",
+                tangential_completed: this.testState.tangential_test_completed || false,
+                radial_completed: this.testState.radial_test_completed || false
+            });
+
         } else if (this.testState.current_phase === 'BOUNDARY_DETECTION') {
             await this.resumeBoundaryDetection(this.currentTest);
-            
+
             await this.saveBoundaryResults();
-            this.testState.awaiting_user_confirmation = true;
+            this.testState.boundary_detection_completed = true;
+            this.testState.awaiting_test_selection = true;
+            this.testState.awaiting_user_confirmation = false;
             await this.saveTestState();
-            
+
             this.isRunning = false;
             await testService.updateTestStatus(test_id, 'PAUSED');
-            
+
             this.emit("boundary_detection_completed", {
                 test_id: test_id,
                 boundary_results: this.testState.boundary_results,
-                message: "Boundary detection complete. Continue with compliance test?"
+                message: "Boundary detection complete. Choose which test to run first:",
+                tangential_completed: this.testState.tangential_test_completed,
+                radial_completed: this.testState.radial_test_completed
             });
-            
-        } else if (this.testState.current_phase === 'COMPLIANCE_TEST') {
-            await this.resumeComplianceTest(this.currentTest);
-            
-            this.testState.current_phase = 'COMPLETED';
-            await this.saveTestState();
-            await testService.updateTestStatus(test_id, 'COMPLETED', undefined, new Date());
-            
-            this.emit("test_completed", { test_id: test_id });
+
+        } else if (this.testState.current_phase === 'TANGENTIAL_TEST' || this.testState.current_phase === 'RADIAL_TEST') {
+            // Resume tangential or radial test
+            const testType = this.testState.current_phase === 'TANGENTIAL_TEST' ? 'TANGENTIAL' : 'RADIAL';
+            await this.startNextPhase(testType);
         }
     }
 
@@ -682,6 +725,116 @@ export class MasterTestOrchestrator extends EventEmitter {
         };
     }
 
+    /**
+     * Execute radial test phase (testing at boundary + offset distances)
+     */
+    private async executeRadialTest(config: MasterTestConfiguration): Promise<void> {
+        const testDistances = config.compliance_test_distances;
+        const boundaries = this.testState!.boundary_results;
+
+        const totalPositions = boundaries.filter(b => b.detection_boundary !== null).length * testDistances.length;
+
+        this.emit("phase_progress", {
+            phase: 'RADIAL_TEST',
+            total_positions: totalPositions,
+            completed_positions: 0
+        });
+
+        let completedCount = 0;
+
+        for (const boundary of boundaries) {
+            this.ensureNotStopped();
+            if (boundary.detection_boundary === null) {
+                console.warn(`No boundary found at angle ${boundary.angle}, skipping radial test`);
+                continue;
+            }
+
+            for (const offsetDistance of testDistances) {
+                if (this.isPaused) await this.waitForResume();
+                this.ensureNotStopped();
+
+                const testDistance = boundary.detection_boundary + offsetDistance;
+
+                await this.performComplianceMeasurement(
+                    config.test_id,
+                    boundary.angle,
+                    testDistance,
+                    offsetDistance,
+                    config.movement_speed || 50,
+                    config.detection_wait_time || 2000,
+                    config.repeat_measurements || 2
+                );
+
+                completedCount++;
+                this.testState!.completed_step_count++;
+
+                await this.updateRobotPosition();
+                await this.saveTestState();
+
+                this.emit("phase_progress", {
+                    phase: 'RADIAL_TEST',
+                    total_positions: totalPositions,
+                    completed_positions: completedCount
+                });
+            }
+        }
+    }
+
+    /**
+     * Execute tangential test phase (sweeping around at fixed radii)
+     */
+    private async executeTangentialTest(config: MasterTestConfiguration): Promise<void> {
+        const testDistances = config.compliance_test_distances;
+        const angleStep = config.compliance_tangential_step || 15;
+        const totalAngles = Math.floor(360 / angleStep);
+        const totalPositions = testDistances.length * totalAngles;
+
+        this.emit("phase_progress", {
+            phase: 'TANGENTIAL_TEST',
+            total_positions: totalPositions,
+            completed_positions: 0
+        });
+
+        let completedCount = 0;
+
+        // For each test distance (e.g., 2m, 3m from sensor)
+        for (const testDistance of testDistances) {
+            this.ensureNotStopped();
+
+            // Sweep around 360° at this fixed radius
+            for (let angle = 0; angle < 360; angle += angleStep) {
+                if (this.isPaused) await this.waitForResume();
+                this.ensureNotStopped();
+
+                await this.testPositionWithRepeats(
+                    config.test_id,
+                    'COMPLIANCE_TANGENTIAL',
+                    angle,
+                    testDistance,
+                    config.movement_speed || 50,
+                    config.detection_wait_time || 2000,
+                    config.repeat_measurements || 2
+                );
+
+                completedCount++;
+                this.testState!.completed_step_count++;
+
+                await this.updateRobotPosition();
+                await this.saveTestState();
+
+                this.emit("phase_progress", {
+                    phase: 'TANGENTIAL_TEST',
+                    total_positions: totalPositions,
+                    completed_positions: completedCount
+                });
+            }
+        }
+    }
+
+    /**
+     * Legacy compliance test method (combines both radial and tangential)
+     * Kept for backward compatibility
+     */
     private async executeComplianceTest(config: MasterTestConfiguration): Promise<void> {
         const testDistances = config.compliance_test_distances;
         const boundaries = this.testState!.boundary_results;
@@ -719,7 +872,7 @@ export class MasterTestOrchestrator extends EventEmitter {
 
                 completedCount++;
                 this.testState!.completed_step_count++;
-                
+
                 // NEW: Save robot position after each measurement
                 await this.updateRobotPosition();
                 await this.saveTestState();
@@ -923,53 +1076,102 @@ export class MasterTestOrchestrator extends EventEmitter {
         }
     }
 
-    async continueToComplianceTest(): Promise<boolean> {
+    /**
+     * Start the next phase (tangential or radial test)
+     * @param testType - 'TANGENTIAL' or 'RADIAL'
+     */
+    async startNextPhase(testType: 'TANGENTIAL' | 'RADIAL'): Promise<boolean> {
         if (!this.testState || !this.currentTest) {
             throw new Error("No test in progress");
         }
 
-        if (!this.testState.awaiting_user_confirmation) {
-            throw new Error("Not awaiting confirmation");
+        if (!this.testState.awaiting_test_selection) {
+            throw new Error("Not awaiting test selection");
         }
+
+        const phase: TestPhase = testType === 'TANGENTIAL' ? 'TANGENTIAL_TEST' : 'RADIAL_TEST';
+        const testName = testType === 'TANGENTIAL' ? 'Tangential' : 'Radial';
 
         try {
             this.isRunning = true;
             this.isPaused = false;
             this.stopRequested = false;
+            this.testState.awaiting_test_selection = false;
             this.testState.awaiting_user_confirmation = false;
-            this.testState.current_phase = 'COMPLIANCE_TEST';
-            this.testState.progress.phase = 'COMPLIANCE_TEST';
-            this.testState.progress.total_steps = this.calculateTotalSteps(this.currentTest, 'COMPLIANCE_TEST');
+            this.testState.current_phase = phase;
+            this.testState.progress.phase = phase;
+            this.testState.progress.total_steps = this.calculateTotalSteps(this.currentTest, phase);
+            this.testState.progress.completed_steps = 0;
+            this.testState.progress.current_step = 0;
             await this.saveTestState();
 
             await testService.updateTestStatus(this.currentTest.test_id, 'IN_PROGRESS');
 
-            this.emit("compliance_test_started", { 
-                test_id: this.currentTest.test_id 
+            this.emit(`${testType.toLowerCase()}_test_started`, {
+                test_id: this.currentTest.test_id,
+                test_type: testType
             });
 
-            await this.executeComplianceTest(this.currentTest);
+            console.log("\n" + "=".repeat(80));
+            console.log(`🎯 [MasterTest] STARTING ${testName.toUpperCase()} TEST PHASE`);
+            console.log("=".repeat(80));
+            console.log(`   Using boundary results from earlier detection`);
+            console.log("=".repeat(80) + "\n");
 
-            this.testState.current_phase = 'COMPLETED';
-            await this.saveTestState();
+            // Execute the appropriate test
+            if (testType === 'TANGENTIAL') {
+                await this.executeTangentialTest(this.currentTest);
+                this.testState.tangential_test_completed = true;
+            } else {
+                await this.executeRadialTest(this.currentTest);
+                this.testState.radial_test_completed = true;
+            }
 
-            await testService.updateTestStatus(
-                this.currentTest.test_id,
-                'COMPLETED',
-                undefined,
-                new Date()
-            );
+            console.log(`\n✅ [MasterTest] ${testName} test complete`);
 
-            this.emit("test_completed", { test_id: this.currentTest.test_id });
+            // Check if both tests are done
+            if (this.testState.tangential_test_completed && this.testState.radial_test_completed) {
+                this.testState.current_phase = 'COMPLETED';
+                await this.saveTestState();
+
+                await testService.updateTestStatus(
+                    this.currentTest.test_id,
+                    'COMPLETED',
+                    undefined,
+                    new Date()
+                );
+
+                this.emit("test_completed", { test_id: this.currentTest.test_id });
+                console.log("\n🎉 [MasterTest] ALL TESTS COMPLETED!");
+            } else {
+                // Ask user if they want to continue to the other test
+                const nextTest = this.testState.tangential_test_completed ? 'RADIAL' : 'TANGENTIAL';
+                this.testState.awaiting_test_selection = true;
+                this.testState.current_phase = this.testState.tangential_test_completed ? 'TANGENTIAL_TEST' : 'RADIAL_TEST';
+                await this.saveTestState();
+
+                await testService.updateTestStatus(this.currentTest.test_id, 'PAUSED');
+
+                this.emit("phase_completed_awaiting_next", {
+                    test_id: this.currentTest.test_id,
+                    completed_phase: testType,
+                    next_phase: nextTest,
+                    tangential_completed: this.testState.tangential_test_completed,
+                    radial_completed: this.testState.radial_test_completed
+                });
+
+                console.log(`\n⏸️  [MasterTest] Awaiting user decision for ${nextTest} test`);
+            }
+
             return true;
 
         } catch (error) {
             if (error instanceof StopRequestedError) {
-                console.warn("[MasterTest] Compliance test stopped by user");
+                console.warn(`[MasterTest] ${testName} test stopped by user`);
                 return false;
             }
-            console.error("[MasterTest] Compliance test failed:", error);
-            
+            console.error(`[MasterTest] ${testName} test failed:`, error);
+
             await testService.updateTestStatus(
                 this.currentTest.test_id,
                 'ERROR',
@@ -981,10 +1183,22 @@ export class MasterTestOrchestrator extends EventEmitter {
             return false;
 
         } finally {
-            this.isRunning = false;
-            this.currentTest = null;
-            this.testState = null;
+            if (!this.testState?.awaiting_test_selection) {
+                this.isRunning = false;
+                this.currentTest = null;
+                this.testState = null;
+            } else {
+                this.isRunning = false;
+            }
         }
+    }
+
+    /**
+     * Legacy method for backward compatibility
+     */
+    async continueToComplianceTest(): Promise<boolean> {
+        // Default to tangential test first
+        return this.startNextPhase('TANGENTIAL');
     }
 
     // Helper methods
@@ -1032,9 +1246,18 @@ export class MasterTestOrchestrator extends EventEmitter {
                 (config.boundary_start_distance - config.boundary_end_distance) / config.boundary_step
             );
             return anglesCount * distanceSteps;
-        } else {
-            const boundaries = this.testState?.boundary_results.length || config.boundary_angles.length;
+        } else if (phase === 'RADIAL_TEST') {
+            // Radial test: test at boundary + offset distances for all detected boundaries
+            const boundaries = this.testState?.boundary_results.filter(b => b.detection_boundary !== null).length || config.boundary_angles.length;
             return boundaries * config.compliance_test_distances.length;
+        } else if (phase === 'TANGENTIAL_TEST') {
+            // Tangential test: sweep 360° at fixed radii
+            const angleStep = config.compliance_tangential_step || 15;
+            const totalAngles = Math.floor(360 / angleStep);
+            return config.compliance_test_distances.length * totalAngles;
+        } else {
+            // COMPLETED or unknown
+            return 0;
         }
     }
 
@@ -1143,18 +1366,29 @@ export class MasterTestOrchestrator extends EventEmitter {
         }
 
         const row = result.rows[0];
+        const stateData = row.state_data ? JSON.parse(row.state_data) : {};
+
         return {
             test_id: row.test_id,
             current_phase: row.current_phase,
             boundary_results: JSON.parse(row.boundary_results || '[]'),
-            awaiting_user_confirmation: row.awaiting_confirmation,
+            awaiting_user_confirmation: row.awaiting_confirmation || false,
+            awaiting_test_selection: stateData.awaiting_test_selection || false,
+            boundary_detection_completed: stateData.boundary_detection_completed || (row.boundary_results && JSON.parse(row.boundary_results).length > 0),
+            tangential_test_completed: stateData.tangential_test_completed || false,
+            radial_test_completed: stateData.radial_test_completed || false,
             last_completed_angle: row.last_completed_angle,
             last_completed_distance: row.last_completed_distance,
             completed_step_count: row.completed_step_count || 0,
             last_position_x: row.last_position_x,
             last_position_y: row.last_position_y,
             last_position_timestamp: row.last_position_timestamp,
-            progress: row.state_data ? JSON.parse(row.state_data).progress : null
+            progress: stateData.progress || {
+                phase: row.current_phase,
+                total_steps: 0,
+                completed_steps: 0,
+                current_step: 0
+            }
         };
     }
 

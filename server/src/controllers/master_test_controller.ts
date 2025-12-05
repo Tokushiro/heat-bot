@@ -54,19 +54,51 @@ export async function startMasterTest(req: Request, res: Response) {
 }
 
 /**
+ * Start a specific test phase (tangential or radial)
+ * @param test_type - 'TANGENTIAL' or 'RADIAL'
+ */
+export async function startTestPhase(req: Request, res: Response) {
+    try {
+        const { test_type } = req.body;
+
+        if (!test_type || (test_type !== 'TANGENTIAL' && test_type !== 'RADIAL')) {
+            return res.status(400).json({
+                error: "Invalid test_type. Must be 'TANGENTIAL' or 'RADIAL'"
+            });
+        }
+
+        const orchestrator = MasterTestOrchestrator.instance;
+
+        // Start the requested test phase
+        orchestrator.startNextPhase(test_type).catch((error) => {
+            console.error(`[MasterTest] ${test_type} test error:`, error);
+        });
+
+        return res.status(202).json({
+            message: `Starting ${test_type.toLowerCase()} test phase`,
+            test_type
+        });
+
+    } catch (error: any) {
+        return res.status(500).json({ error: error.message });
+    }
+}
+
+/**
  * Continue to compliance test phase (after boundary detection)
+ * @deprecated Use startTestPhase instead
  */
 export async function continueToCompliance(req: Request, res: Response) {
     try {
         const orchestrator = MasterTestOrchestrator.instance;
-        
-        // Continue with compliance testing
+
+        // Continue with compliance testing (defaults to tangential)
         orchestrator.continueToComplianceTest().catch((error) => {
             console.error("[MasterTest] Compliance test error:", error);
         });
 
-        return res.status(202).json({ 
-            message: "Continuing to compliance test phase" 
+        return res.status(202).json({
+            message: "Continuing to compliance test phase"
         });
 
     } catch (error: any) {

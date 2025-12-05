@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { Layout, Typography, Button, Space, Tag, Empty, message, Progress, Statistic, Row, Col, Divider } from "antd";
-import { LeftOutlined, PlayCircleOutlined, DownOutlined, CheckCircleOutlined, ClockCircleOutlined, EnvironmentOutlined } from "@ant-design/icons";
+import { LeftOutlined, PlayCircleOutlined, DownOutlined, CheckCircleOutlined, ClockCircleOutlined, EnvironmentOutlined, DownloadOutlined } from "@ant-design/icons";
 import type { TestDB } from "../Components/testCard.tsx";
 import { useEffect, useState } from "react";
 import type {Test} from "../Types/test.ts";
@@ -178,6 +178,153 @@ export default function HistoryPage() {
         }
     };
 
+    const handleExportCSV = async (testId: number | null | undefined) => {
+        if (!testId) {
+            message.error("Cannot export test with invalid ID");
+            return;
+        }
+
+        try {
+            message.loading({ content: 'Generating CSV...', key: 'export' });
+
+            // Fetch complete test data
+            const response = await api.get(`/api/test/${testId}/export`);
+            const data = response.data;
+
+            // Generate CSV content
+            const csv = generateCSV(data);
+
+            // Download CSV file
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+
+            link.setAttribute('href', url);
+            link.setAttribute('download', `test_${testId}_${data.test.test_name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`);
+            link.style.visibility = 'hidden';
+
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            message.success({ content: 'CSV exported successfully', key: 'export' });
+        } catch (err) {
+            console.error("Error exporting CSV:", err);
+            message.error({ content: 'Failed to export CSV', key: 'export' });
+        }
+    };
+
+    const generateCSV = (data: any): string => {
+        const lines: string[] = [];
+        const { test, state, steps, summary } = data;
+
+        // Header
+        lines.push('"PIR SENSOR PERFORMANCE - BOUNDARY DETECTION TEST"');
+        lines.push('');
+
+        // Metadata Section
+        lines.push('"Test Information"');
+        lines.push(`"Standard","IEC 63180 Ed. 1"`);
+        lines.push(`"Test Lab","H.E.A.T. Bot Testing System"`);
+        lines.push(`"Test Method","Automated - Robot System"`);
+        lines.push(`"Test ID","${test.test_id}"`);
+        lines.push(`"Test Name","${test.test_name}"`);
+        lines.push(`"Sensor ID","${test.sensor_id}"`);
+        lines.push(`"Test Date","${new Date(test.test_date).toLocaleString()}"`);
+        lines.push(`"Test Status","${test.status}"`);
+        if (test.started_at) lines.push(`"Started At","${new Date(test.started_at).toLocaleString()}"`);
+        if (test.finished_at) lines.push(`"Finished At","${new Date(test.finished_at).toLocaleString()}"`);
+        lines.push('');
+
+        // Test Parameters
+        lines.push('"Test Parameters"');
+        lines.push(`"Movement Speed","0.5 m/s"`);
+        lines.push(`"Detection Wait Time","2 seconds"`);
+        lines.push(`"Repeat Measurements","2 attempts"`);
+        lines.push(`"Distance Range","1.0m - 8.0m"`);
+        lines.push(`"Distance Step","0.5m"`);
+        lines.push(`"Angle Increments","10° (36 angles total)"`);
+        lines.push('');
+
+        // Test Summary
+        lines.push('"Test Summary"');
+        if (summary) {
+            lines.push(`"Total Steps","${summary.total}"`);
+            lines.push(`"Completed","${summary.completed}"`);
+            lines.push(`"Running","${summary.running}"`);
+            lines.push(`"Pending","${summary.pending}"`);
+            lines.push(`"Errors","${summary.error}"`);
+            lines.push(`"Success Rate","${summary.total > 0 ? Math.round((summary.completed / summary.total) * 100) : 0}%"`);
+        }
+        lines.push('');
+
+        // Boundary Detection Results
+        if (state && state.boundary_results) {
+            const boundaryResults = JSON.parse(state.boundary_results);
+
+            lines.push('"BOUNDARY DETECTION RESULTS"');
+            lines.push('');
+            lines.push(`"Total Angles Tested","${boundaryResults.length}"`);
+            const detectedCount = boundaryResults.filter((r: any) => r.detection_boundary !== null).length;
+            lines.push(`"Angles with Detection","${detectedCount}"`);
+            lines.push(`"Detection Rate","${boundaryResults.length > 0 ? Math.round((detectedCount / boundaryResults.length) * 100) : 0}%"`);
+            lines.push('');
+
+            // Column headers
+            lines.push('"Angle (°)","Detected Distance (m)","No Detection Distance (m)","Detection Boundary (m)"');
+
+            // Data rows
+            boundaryResults.forEach((result: any) => {
+                lines.push(
+                    `"${result.angle}",` +
+                    `"${result.detected_distance !== null ? result.detected_distance.toFixed(2) : 'N/A'}",` +
+                    `"${result.no_detection_distance !== null ? result.no_detection_distance.toFixed(2) : 'N/A'}",` +
+                    `"${result.detection_boundary !== null ? result.detection_boundary.toFixed(2) : 'N/A'}"`
+                );
+            });
+            lines.push('');
+        }
+
+        // Detailed Test Steps
+        if (steps && steps.length > 0) {
+            lines.push('"DETAILED TEST STEPS"');
+            lines.push('');
+
+            // Column headers
+            lines.push(
+                '"Step ID","Sequence","Type","Angle (°)","Distance (m)","Status",' +
+                '"Detection 1","Detection 2","Detection Final",' +
+                '"Started At","Finished At"'
+            );
+
+            // Data rows
+            steps.forEach((step: any) => {
+                lines.push(
+                    `"${step.test_step_id}",` +
+                    `"${step.sequence_no}",` +
+                    `"${step.step_type}",` +
+                    `"${step.angle !== null ? step.angle : 'N/A'}",` +
+                    `"${step.distance_1 !== null ? step.distance_1.toFixed(2) : 'N/A'}",` +
+                    `"${step.status}",` +
+                    `"${step.detection_1 !== null ? (step.detection_1 ? 'YES' : 'NO') : 'N/A'}",` +
+                    `"${step.detection_2 !== null ? (step.detection_2 ? 'YES' : 'NO') : 'N/A'}",` +
+                    `"${step.detection_final !== null ? (step.detection_final ? 'YES' : 'NO') : 'N/A'}",` +
+                    `"${step.started_at ? new Date(step.started_at).toLocaleString() : 'N/A'}",` +
+                    `"${step.finished_at ? new Date(step.finished_at).toLocaleString() : 'N/A'}"`
+                );
+            });
+            lines.push('');
+        }
+
+        // Footer
+        lines.push('');
+        lines.push('"Generated by H.E.A.T. Bot Testing System"');
+        lines.push(`"Export Date","${new Date().toLocaleString()}"`);
+        lines.push('"Compliant with IEC 63180 Standard"');
+
+        return lines.join('\n');
+    };
+
     const getStatusColor = (status: string) => {
         switch (status) {
             case 'COMPLETED': return 'green';
@@ -296,30 +443,35 @@ export default function HistoryPage() {
                 {/* Boundary Results */}
                 {item.boundary_results && item.boundary_results.length > 0 && (
                     <div style={{ marginBottom: 16 }}>
-                        <Text strong>Detected Boundaries:</Text>
-                        <Row gutter={[8, 8]} style={{ marginTop: 8 }}>
-                            {item.boundary_results.map((result: BoundaryResult) => (
-                                <Col span={6} key={result.angle}>
-                                    <div style={{
-                                        background: '#f0f0f0',
-                                        padding: '8px',
-                                        borderRadius: 4,
-                                        textAlign: 'center'
-                                    }}>
-                                        <Text strong>{result.angle}°</Text>
-                                        <br />
-                                        <Text style={{ fontSize: 18, color: result.detection_boundary ? '#52c41a' : '#999' }}>
-                                            {result.detection_boundary ? `${result.detection_boundary.toFixed(2)}m` : 'N/A'}
-                                        </Text>
-                                        {result.detection_boundary && (
-                                            <div>
-                                                <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 12 }} />
-                                            </div>
-                                        )}
-                                    </div>
-                                </Col>
-                            ))}
-                        </Row>
+                        <Text strong>
+                            Detected Boundaries ({item.boundary_results.filter((r: BoundaryResult) => r.detection_boundary !== null).length}/{item.boundary_results.length} angles)
+                        </Text>
+                        <div style={{ maxHeight: '300px', overflow: 'auto', marginTop: 8 }}>
+                            <Row gutter={[6, 6]}>
+                                {item.boundary_results.map((result: BoundaryResult) => (
+                                    <Col span={4} key={result.angle}>
+                                        <div style={{
+                                            background: result.detection_boundary ? '#f6ffed' : '#fff2e8',
+                                            border: result.detection_boundary ? '1px solid #b7eb8f' : '1px solid #ffd591',
+                                            padding: '6px',
+                                            borderRadius: 4,
+                                            textAlign: 'center'
+                                        }}>
+                                            <Text strong style={{ fontSize: 12 }}>{result.angle}°</Text>
+                                            <br />
+                                            <Text style={{ fontSize: 14, color: result.detection_boundary ? '#52c41a' : '#999' }}>
+                                                {result.detection_boundary ? `${result.detection_boundary.toFixed(2)}m` : 'N/A'}
+                                            </Text>
+                                            {result.detection_boundary && (
+                                                <div>
+                                                    <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 10 }} />
+                                                </div>
+                                            )}
+                                        </div>
+                                    </Col>
+                                ))}
+                            </Row>
+                        </div>
                     </div>
                 )}
 
@@ -544,6 +696,12 @@ export default function HistoryPage() {
                                                         )}
                                                         <Button onClick={() => handleContinue(item)}>
                                                             View
+                                                        </Button>
+                                                        <Button
+                                                            icon={<DownloadOutlined />}
+                                                            onClick={() => handleExportCSV(item.test_id)}
+                                                        >
+                                                            Export CSV
                                                         </Button>
                                                         <Button
                                                             danger

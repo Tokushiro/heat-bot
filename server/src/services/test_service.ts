@@ -1,7 +1,7 @@
 import pool from "../db_conn";
 import type { Test } from "../models/test";
 
-export async function insertTest(test: Test): Promise<void> {
+export async function insertTest(test: Test): Promise<number> {
     const {
         test_name,
         test_choice,
@@ -15,6 +15,7 @@ export async function insertTest(test: Test): Promise<void> {
             (test_name, test_choice, sensor_id, test_date, status)
         VALUES
             ($1, $2, $3, $4, $5)
+        RETURNING test_id
     `;
 
     const values = [
@@ -25,7 +26,8 @@ export async function insertTest(test: Test): Promise<void> {
         status
     ];
 
-    await pool.query(query, values);
+    const result = await pool.query(query, values);
+    return result.rows[0].test_id;
 }
 
 export async function getAllTests(): Promise<Test[]> {

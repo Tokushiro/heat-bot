@@ -93,14 +93,22 @@ export default function TestSelectionModal({
                 .replace("T", " ")
                 .replace("Z", "");
 
-            await api.post("/api/test", {
+            const response = await api.post("/api/test", {
                 test_name: values.test_name,
                 test_choice: values.test_choice, // number
                 sensor_id: values.sensor_id, // number
                 test_date: time,
             });
 
-            await onSubmit(values, form);
+            // Capture the test_id from the response
+            const createdTest: Test = {
+                ...values,
+                test_id: response.data.test_id,
+                test_date: new Date(time),
+                status: 'PLANNED'
+            };
+
+            await onSubmit(createdTest, form);
             message.success("Test created");
             onClose();
             form.resetFields();

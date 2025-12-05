@@ -7,6 +7,7 @@ const router = Router();
 router.post('/', createTest);
 router.get('/', listTests);
 router.get('/:testId', getTest);
+router.get('/:testId/export', testStateController.exportTestData);
 router.patch('/:testId/status', updateStatus);
 router.delete('/:testId', removeTest);
 router.get('/:testId/steps/summary', testStateController.getTestStepSummary);
