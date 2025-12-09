@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { MasterTestOrchestrator, MasterTestConfiguration } from "../../services/test/MasterTestOrchestrator";
+import * as testStateService from "../../services/test/TestStateService";
 
 export async function startMasterTest(req: Request, res: Response) {
     try {
@@ -28,6 +29,58 @@ export async function startMasterTest(req: Request, res: Response) {
         if (orchestrator.isTestRunning()) {
             console.warn("[MasterTest Controller] ⚠️ Test already running");
             return res.status(409).json({ error: "A test is already running" });
+        }
+
+        // Check if test has existing state in orchestrator (in-memory)
+        const currentState = orchestrator.getTestState();
+        if (currentState && currentState.test_id === config.test_id) {
+            // Test has existing state - check what phase we're in
+            if (currentState.awaiting_test_selection) {
+                console.log("[MasterTest Controller] ⚠️ Test already has state and is awaiting test selection");
+                return res.status(409).json({
+                    error: "Test is awaiting test selection. Use /start-phase endpoint instead.",
+                    current_phase: currentState.current_phase,
+                    awaiting_test_selection: true,
+                    boundary_detection_completed: currentState.boundary_detection_completed,
+                    tangential_test_completed: currentState.tangential_test_completed,
+                    radial_test_completed: currentState.radial_test_completed
+                });
+            } else if (currentState.boundary_detection_completed) {
+                console.log("[MasterTest Controller] ⚠️ Boundary detection already completed");
+                return res.status(409).json({
+                    error: "Boundary detection already completed. Use /resume or /start-phase endpoint.",
+                    current_phase: currentState.current_phase,
+                    boundary_detection_completed: true
+                });
+            }
+        }
+
+        // Also check database state (in case orchestrator was restarted or lost state)
+        const dbState = await testStateService.getTestState(config.test_id);
+        if (dbState) {
+            console.log("[MasterTest Controller] 📊 Found existing state in database");
+            const stateData = dbState.state_data || {};
+
+            if (stateData.awaiting_test_selection) {
+                console.log("[MasterTest Controller] ⚠️ Database shows test is awaiting test selection");
+                return res.status(409).json({
+                    error: "Test is awaiting test selection. Use /start-phase endpoint instead.",
+                    current_phase: dbState.current_phase,
+                    awaiting_test_selection: true,
+                    boundary_detection_completed: stateData.boundary_detection_completed || false,
+                    tangential_test_completed: stateData.tangential_test_completed || false,
+                    radial_test_completed: stateData.radial_test_completed || false
+                });
+            } else if (stateData.boundary_detection_completed) {
+                console.log("[MasterTest Controller] ⚠️ Database shows boundary detection already completed");
+                return res.status(409).json({
+                    error: "Boundary detection already completed. Use /resume or /start-phase endpoint.",
+                    current_phase: dbState.current_phase,
+                    boundary_detection_completed: true,
+                    tangential_test_completed: stateData.tangential_test_completed || false,
+                    radial_test_completed: stateData.radial_test_completed || false
+                });
+            }
         }
 
         console.log("[MasterTest Controller] ✅ Starting test asynchronously...");
@@ -142,6 +195,80 @@ export async function resumeFromState(req: Request, res: Response) {
     }
 }
 
+/**
+ * Restore orchestrator state from database
+ * Used when loading test from history after server restart
+ */
+export async function resumeFromDatabase(req: Request, res: Response) {
+    try {
+        const { test_id } = req.body;
+
+        console.log("[MasterTest Controller] Resume from database request:", test_id);
+
+        if (!test_id) {
+            return res.status(400).json({ error: "test_id is required" });
+        }
+
+        const orchestrator = MasterTestOrchestrator.instance;
+
+        if (orchestrator.isTestRunning()) {
+            return res.status(409).json({ error: "A test is already running" });
+        }
+
+        // Check if orchestrator already has state for this test
+        const currentState = orchestrator.getTestState();
+        if (currentState && currentState.test_id === test_id) {
+            console.log("[MasterTest Controller] Orchestrator already has state for this test");
+            return res.status(200).json({ message: "State already loaded" });
+        }
+
+        // Load state from database
+        const dbState = await testStateService.getTestState(test_id);
+        if (!dbState) {
+            return res.status(404).json({ error: "No state found in database for this test" });
+        }
+
+        // Load test configuration from database (needed for startNextPhase to work)
+        const testService = await import("../../services/test/TestService");
+        const test = await testService.getTestById(test_id);
+        if (!test) {
+            return res.status(404).json({ error: "Test not found" });
+        }
+
+        // Create a minimal test configuration for orchestrator
+        // This allows startNextPhase to work properly
+        const testConfig = {
+            test_id: test_id,
+            sensor_id: test.sensor_id,
+            test_type: 'FULL' as const,
+            boundary_angles: Array.from({ length: 36 }, (_, i) => i * 10),
+            boundary_start_distance: 8.0,
+            boundary_end_distance: 1.0,
+            boundary_step: 0.5,
+            compliance_test_distances: [2.0, 3.0],
+            compliance_tangential_sweep: true,
+            compliance_tangential_step: 15,
+            movement_speed: 50,
+            detection_wait_time: 2000,
+            repeat_measurements: 2
+        };
+
+        // Restore orchestrator state from database with test config
+        await orchestrator.restoreFromDatabase(test_id, dbState, testConfig);
+
+        return res.status(200).json({
+            message: "State restored from database",
+            test_id,
+            current_phase: dbState.current_phase,
+            awaiting_test_selection: dbState.state_data?.awaiting_test_selection || false
+        });
+
+    } catch (error: any) {
+        console.error("[MasterTest Controller] Error restoring from database:", error);
+        return res.status(500).json({ error: error.message || "Failed to restore state" });
+    }
+}
+
 export async function pauseMasterTest(req: Request, res: Response) {
     try {
         const orchestrator = MasterTestOrchestrator.instance;
@@ -212,6 +339,9 @@ export function masterTestStream(req: Request, res: Response) {
     const onTestStarted = (data: any) => send("test_started", data);
     const onBoundaryDetectionCompleted = (data: any) => send("boundary_detection_completed", data);
     const onComplianceTestStarted = (data: any) => send("compliance_test_started", data);
+    const onTangentialTestStarted = (data: any) => send("tangential_test_started", data);
+    const onRadialTestStarted = (data: any) => send("radial_test_started", data);
+    const onPhaseCompletedAwaitingNext = (data: any) => send("phase_completed_awaiting_next", data);
     const onTestCompleted = (data: any) => send("test_completed", data);
     const onTestFailed = (data: any) => send("test_failed", data);
     const onTestPaused = () => send("test_paused", {});
@@ -229,6 +359,9 @@ export function masterTestStream(req: Request, res: Response) {
     orchestrator.on("test_started", onTestStarted);
     orchestrator.on("boundary_detection_completed", onBoundaryDetectionCompleted);
     orchestrator.on("compliance_test_started", onComplianceTestStarted);
+    orchestrator.on("tangential_test_started", onTangentialTestStarted);
+    orchestrator.on("radial_test_started", onRadialTestStarted);
+    orchestrator.on("phase_completed_awaiting_next", onPhaseCompletedAwaitingNext);
     orchestrator.on("test_completed", onTestCompleted);
     orchestrator.on("test_failed", onTestFailed);
     orchestrator.on("test_paused", onTestPaused);
@@ -247,6 +380,9 @@ export function masterTestStream(req: Request, res: Response) {
         orchestrator.off("test_started", onTestStarted);
         orchestrator.off("boundary_detection_completed", onBoundaryDetectionCompleted);
         orchestrator.off("compliance_test_started", onComplianceTestStarted);
+        orchestrator.off("tangential_test_started", onTangentialTestStarted);
+        orchestrator.off("radial_test_started", onRadialTestStarted);
+        orchestrator.off("phase_completed_awaiting_next", onPhaseCompletedAwaitingNext);
         orchestrator.off("test_completed", onTestCompleted);
         orchestrator.off("test_failed", onTestFailed);
         orchestrator.off("test_paused", onTestPaused);

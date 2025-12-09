@@ -15,6 +15,9 @@ router.post('/continue', masterTestController.continueToCompliance);
 // Resume from saved state (from history)
 router.post('/resume', masterTestController.resumeFromState);
 
+// Restore orchestrator state from database
+router.post('/resume-from-database', masterTestController.resumeFromDatabase);
+
 // Pause/Resume/Stop
 router.post('/pause', masterTestController.pauseMasterTest);
 router.post('/resume-execution', masterTestController.resumeMasterTest);

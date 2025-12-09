@@ -95,3 +95,32 @@ export async function getTestSteps(
     const result = await pool.query(query, params);
     return result.rows;
 }
+
+/**
+ * Get compliance test results (tangential or radial)
+ * Returns array of measurement results with angle, distance, offset, and detected status
+ */
+export async function getComplianceResults(testId: number, testType: 'TANGENTIAL' | 'RADIAL') {
+    // Map test type to step_type in database
+    const stepType = testType === 'TANGENTIAL' ? 'TANGENTIAL_SWEEP' : 'RADIAL_COMPLIANCE';
+
+    const result = await pool.query(
+        `SELECT
+            angle,
+            distance_1 as distance,
+            distance_2 as offset_from_boundary,
+            detection_final,
+            sequence_no
+         FROM test_step
+         WHERE test_id = $1 AND step_type = $2
+         ORDER BY sequence_no ASC`,
+        [testId, stepType]
+    );
+
+    return result.rows.map(row => ({
+        angle: parseFloat(row.angle),
+        distance: parseFloat(row.distance),
+        offset_from_boundary: row.offset_from_boundary ? parseFloat(row.offset_from_boundary) : undefined,
+        detected: row.detection_final === true || row.detection_final === 'true' // Handle both boolean and string
+    }));
+}

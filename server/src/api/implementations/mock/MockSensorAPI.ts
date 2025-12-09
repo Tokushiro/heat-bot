@@ -59,7 +59,7 @@ export class MockSensorAPI extends EventEmitter implements ISensorAPI {
                     maxDistance: 10,      // Realistic PIR detection range (1-10m)
                     minAngle: 0,
                     maxAngle: 360,        // Full 360° coverage
-                    detectionProbability: 0.80  // Base 80% detection probability
+                    detectionProbability: 0.70  // Base 70% detection probability (reduced for more realistic failures)
                 }
             ];
 
@@ -166,13 +166,31 @@ export class MockSensorAPI extends EventEmitter implements ISensorAPI {
             const distanceRange = matchedZone.maxDistance - matchedZone.minDistance;
             const relativeDistance = (distance - matchedZone.minDistance) / distanceRange;
 
-            // Probability decreases linearly from 100% at minDistance to 60% at maxDistance
-            const distanceFactor = 1.0 - (relativeDistance * 0.4);
+            // Steeper probability decrease: from 100% at minDistance to 50% at maxDistance
+            // This creates more boundary detection challenges
+            const distanceFactor = 1.0 - (relativeDistance * 0.5);
             finalProbability = zoneConfidence * distanceFactor;
 
-            // Add some random variation (±10%) to make it more realistic
-            const randomVariation = 0.9 + (Math.random() * 0.2); // 0.9 to 1.1
+            // Add environmental noise factors for more realism
+            // Simulate temperature effects (PIR sensors are sensitive to ambient temperature)
+            const tempNoise = 1.0 - Math.abs(this.ambientTemp - 20) * 0.01; // Optimal at 20°C
+
+            // Simulate humidity effects (70% is optimal)
+            const humidityNoise = 1.0 - Math.abs(this.humidity - 70) * 0.005; // Optimal at 70%
+
+            finalProbability *= tempNoise * humidityNoise;
+
+            // Add more random variation (±20%) to simulate real-world unpredictability
+            // This includes: air currents, electrical noise, sensor warmup, etc.
+            const randomVariation = 0.8 + (Math.random() * 0.4); // 0.8 to 1.2
             finalProbability *= randomVariation;
+
+            // Add edge case unpredictability at boundary distances
+            // When near the boundary (within 10% of range limits), add extra randomness
+            if (relativeDistance < 0.1 || relativeDistance > 0.9) {
+                const boundaryNoise = 0.7 + (Math.random() * 0.3); // 0.7 to 1.0 (always reduces)
+                finalProbability *= boundaryNoise;
+            }
 
             // Clamp between 0 and 1
             finalProbability = Math.max(0, Math.min(1, finalProbability));

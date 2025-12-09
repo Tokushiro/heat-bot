@@ -17,9 +17,13 @@ interface BoundaryResult {
 }
 
 interface TestWithState extends TestDB {
-    test_phase?: 'BOUNDARY_DETECTION' | 'COMPLIANCE_TEST' | 'COMPLETED';
+    test_phase?: 'BOUNDARY_DETECTION' | 'TANGENTIAL_TEST' | 'RADIAL_TEST' | 'COMPLIANCE_TEST' | 'COMPLETED';
     awaiting_confirmation?: boolean;
+    awaiting_test_selection?: boolean;
     boundary_results?: BoundaryResult[];
+    boundary_detection_completed?: boolean;
+    tangential_test_completed?: boolean;
+    radial_test_completed?: boolean;
     last_position_x?: number;
     last_position_y?: number;
     last_position_timestamp?: string;
@@ -33,6 +37,29 @@ interface TestStepSummary {
     running: number;
     pending: number;
     error: number;
+}
+
+interface ExportData {
+    test: TestDB;
+    state: {
+        boundary_results: string;
+        current_phase?: string;
+        [key: string]: unknown;
+    };
+    steps: Array<{
+        test_step_id: number;
+        sequence_no: number;
+        step_type: string;
+        angle: number | null;
+        distance_1: number | null;
+        status: string;
+        detection_1: boolean | null;
+        detection_2: boolean | null;
+        detection_final: boolean | null;
+        started_at: string | null;
+        finished_at: string | null;
+    }>;
+    summary: TestStepSummary;
 }
 
 // Utility function to format relative time
@@ -92,7 +119,11 @@ export default function HistoryPage() {
                             status: test.status ?? 'PLANNED',
                             test_phase: stateRes.data?.current_phase,
                             awaiting_confirmation: stateRes.data?.awaiting_confirmation,
+                            awaiting_test_selection: stateRes.data?.awaiting_test_selection,
                             boundary_results: stateRes.data?.boundary_results ? JSON.parse(stateRes.data.boundary_results) : [],
+                            boundary_detection_completed: stateRes.data?.boundary_detection_completed,
+                            tangential_test_completed: stateRes.data?.tangential_test_completed,
+                            radial_test_completed: stateRes.data?.radial_test_completed,
                             last_position_x: stateRes.data?.last_position_x,
                             last_position_y: stateRes.data?.last_position_y,
                             last_position_timestamp: stateRes.data?.last_position_timestamp,
@@ -157,9 +188,10 @@ export default function HistoryPage() {
             await api.delete(`/api/test/${testId}`);
             message.success("Test deleted successfully");
             setItems(prev => prev.filter(item => item.test_id !== testId));
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error("Error deleting test:", err);
-            message.error(err?.response?.data?.error ?? "Failed to delete test");
+            const axiosError = err as { response?: { data?: { error?: string } } };
+            message.error(axiosError?.response?.data?.error ?? "Failed to delete test");
         } finally {
             setDeleting(null);
         }
@@ -214,7 +246,7 @@ export default function HistoryPage() {
         }
     };
 
-    const generateCSV = (data: any): string => {
+    const generateCSV = (data: ExportData): string => {
         const lines: string[] = [];
         const { test, state, steps, summary } = data;
 
@@ -260,12 +292,12 @@ export default function HistoryPage() {
 
         // Boundary Detection Results
         if (state && state.boundary_results) {
-            const boundaryResults = JSON.parse(state.boundary_results);
+            const boundaryResults = JSON.parse(state.boundary_results) as BoundaryResult[];
 
             lines.push('"BOUNDARY DETECTION RESULTS"');
             lines.push('');
             lines.push(`"Total Angles Tested","${boundaryResults.length}"`);
-            const detectedCount = boundaryResults.filter((r: any) => r.detection_boundary !== null).length;
+            const detectedCount = boundaryResults.filter((r) => r.detection_boundary !== null).length;
             lines.push(`"Angles with Detection","${detectedCount}"`);
             lines.push(`"Detection Rate","${boundaryResults.length > 0 ? Math.round((detectedCount / boundaryResults.length) * 100) : 0}%"`);
             lines.push('');
@@ -274,7 +306,7 @@ export default function HistoryPage() {
             lines.push('"Angle (°)","Detected Distance (m)","No Detection Distance (m)","Detection Boundary (m)"');
 
             // Data rows
-            boundaryResults.forEach((result: any) => {
+            boundaryResults.forEach((result) => {
                 lines.push(
                     `"${result.angle}",` +
                     `"${result.detected_distance !== null ? result.detected_distance.toFixed(2) : 'N/A'}",` +
@@ -298,7 +330,7 @@ export default function HistoryPage() {
             );
 
             // Data rows
-            steps.forEach((step: any) => {
+            steps.forEach((step) => {
                 lines.push(
                     `"${step.test_step_id}",` +
                     `"${step.sequence_no}",` +
@@ -352,6 +384,10 @@ export default function HistoryPage() {
                 return <Tag color="blue">Phase 1: Boundary Detection</Tag>;
             case 'COMPLIANCE_TEST':
                 return <Tag color="purple">Phase 2: Compliance Test</Tag>;
+            case 'TANGENTIAL_TEST':
+                return <Tag color="purple">Phase 2: Tangential Test</Tag>;
+            case 'RADIAL_TEST':
+                return <Tag color="purple">Phase 2: Radial Test</Tag>;
             case 'COMPLETED':
                 return <Tag color="green" icon={<CheckCircleOutlined />}>All Phases Complete</Tag>;
             default:
@@ -359,12 +395,101 @@ export default function HistoryPage() {
         }
     };
 
+    const getIndividualPhaseStatus = (phaseCompleted?: boolean, awaiting?: boolean, currentPhase?: string, phaseName?: string, testStatus?: string) => {
+        if (phaseCompleted) {
+            return { color: 'green', icon: <CheckCircleOutlined />, text: 'Finished' };
+        } else if (awaiting && currentPhase === phaseName) {
+            return { color: 'gold', icon: <ClockCircleOutlined />, text: 'Awaiting Selection' };
+        } else if (currentPhase === phaseName && testStatus === 'IN_PROGRESS') {
+            return { color: 'blue', icon: <ClockCircleOutlined />, text: 'In Progress' };
+        } else if (currentPhase === phaseName && testStatus === 'PAUSED') {
+            return { color: 'orange', icon: <ClockCircleOutlined />, text: 'Paused' };
+        } else if (currentPhase === phaseName && testStatus === 'ERROR') {
+            return { color: 'red', icon: null, text: 'Error' };
+        } else if (currentPhase === phaseName) {
+            return { color: 'orange', icon: <ClockCircleOutlined />, text: 'Waiting to Resume' };
+        } else {
+            return { color: 'default', icon: null, text: 'Pending' };
+        }
+    };
+
     const renderExpandedContent = (item: TestWithState) => {
         const steps = testSteps[item.test_id!];
         const hasPosition = item.last_position_x !== undefined && item.last_position_y !== undefined;
 
+        // Get status for each phase
+        const boundaryStatus = getIndividualPhaseStatus(
+            item.boundary_detection_completed,
+            item.awaiting_test_selection,
+            item.test_phase,
+            'BOUNDARY_DETECTION',
+            item.status
+        );
+        const tangentialStatus = getIndividualPhaseStatus(
+            item.tangential_test_completed,
+            item.awaiting_test_selection,
+            item.test_phase,
+            'TANGENTIAL_TEST',
+            item.status
+        );
+        const radialStatus = getIndividualPhaseStatus(
+            item.radial_test_completed,
+            item.awaiting_test_selection,
+            item.test_phase,
+            'RADIAL_TEST',
+            item.status
+        );
+
         return (
             <div style={{ padding: '16px 0' }}>
+                {/* Phase Status */}
+                <div style={{ marginBottom: 16 }}>
+                    <Text strong style={{ fontSize: 16, marginBottom: 8, display: 'block' }}>Test Phases</Text>
+                    <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                        <div style={{
+                            background: '#fff',
+                            padding: '12px',
+                            borderRadius: 6,
+                            border: `1px solid ${boundaryStatus.color === 'green' ? '#b7eb8f' : '#d9d9d9'}`
+                        }}>
+                            <Space>
+                                <Text strong>Boundary Detection:</Text>
+                                <Tag color={boundaryStatus.color} icon={boundaryStatus.icon}>
+                                    {boundaryStatus.text}
+                                </Tag>
+                            </Space>
+                        </div>
+                        <div style={{
+                            background: '#fff',
+                            padding: '12px',
+                            borderRadius: 6,
+                            border: `1px solid ${tangentialStatus.color === 'green' ? '#b7eb8f' : '#d9d9d9'}`
+                        }}>
+                            <Space>
+                                <Text strong>Tangential Test:</Text>
+                                <Tag color={tangentialStatus.color} icon={tangentialStatus.icon}>
+                                    {tangentialStatus.text}
+                                </Tag>
+                            </Space>
+                        </div>
+                        <div style={{
+                            background: '#fff',
+                            padding: '12px',
+                            borderRadius: 6,
+                            border: `1px solid ${radialStatus.color === 'green' ? '#b7eb8f' : '#d9d9d9'}`
+                        }}>
+                            <Space>
+                                <Text strong>Radial Test:</Text>
+                                <Tag color={radialStatus.color} icon={radialStatus.icon}>
+                                    {radialStatus.text}
+                                </Tag>
+                            </Space>
+                        </div>
+                    </Space>
+                </div>
+
+                <Divider />
+
                 {/* Progress Summary */}
                 <Row gutter={16} style={{ marginBottom: 16 }}>
                     <Col span={6}>

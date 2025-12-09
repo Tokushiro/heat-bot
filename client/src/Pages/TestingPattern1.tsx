@@ -5,6 +5,7 @@ import type { Test } from "../Types/test.ts"
 import type { TestDB } from "../Components/testCard.tsx";
 import { useMasterTest } from "../Hooks/useMasterTest.tsx";
 import { useEffect, useState } from "react";
+import { api } from "../Components/apiAxios";
 
 const { Text, Title } = Typography;
 const { Header, Content } = Layout;
@@ -46,18 +47,109 @@ function formatEventType(eventType: string): string {
     }
 }
 
+// Format event data to natural language (no JSON, no test_step_id)
+function formatEventData(event: any): string {
+    const data = event.data;
+
+    switch (event.type) {
+        case 'test_log':
+            return data.message ? String(data.message) : '';
+
+        case 'boundary_found_at_angle':
+            if (typeof data.boundary === 'number') {
+                return `Angle ${data.angle}°: ${data.boundary.toFixed(2)}m boundary detected`;
+            }
+            return `Angle ${data.angle}°: No boundary detected`;
+
+        case 'movement_started':
+            if (data.angle !== undefined && data.distance !== undefined) {
+                const attempt = data.attempt ? ` (attempt ${data.attempt})` : '';
+                return `Moving to angle ${data.angle}°, distance ${data.distance}m${attempt}`;
+            }
+            return 'Robot moving to position';
+
+        case 'measurement_completed':
+            if (data.angle !== undefined && data.distance !== undefined) {
+                const detected = data.detected ? '✓ Detected' : '✗ No detection';
+                const attempt = data.attempt ? ` (attempt ${data.attempt})` : '';
+                return `Angle ${data.angle}°, distance ${data.distance}m${attempt}: ${detected}`;
+            }
+            return 'Measurement completed';
+
+        case 'detection':
+            if (data.detected !== undefined) {
+                return data.detected ? 'Sensor detected heat source' : 'No detection';
+            }
+            return 'Detection event';
+
+        case 'compliance_measurement_completed':
+            if (data.angle !== undefined && data.distance !== undefined) {
+                const detected = data.detected ? '✓ Detected' : '✗ No detection';
+                const offset = data.offset_from_boundary ? ` (+${data.offset_from_boundary.toFixed(1)}m from boundary)` : '';
+                return `Angle ${data.angle}°, distance ${data.distance}m${offset}: ${detected}`;
+            }
+            return 'Measurement completed';
+
+        case 'test_started':
+            return data.phase ? `Starting ${data.phase.toLowerCase().replace('_', ' ')} phase` : 'Test started';
+
+        case 'tangential_test_started':
+        case 'radial_test_started':
+            return 'Test phase starting...';
+
+        case 'boundary_detection_completed':
+            const results = data.boundary_results?.length || 0;
+            return `Completed with ${results} boundary measurements`;
+
+        case 'phase_completed_awaiting_next':
+            if (data.completed_phase) {
+                return `${data.completed_phase} test complete. Ready to start next phase.`;
+            }
+            return 'Phase complete. Awaiting user selection for next test.';
+
+        case 'test_completed':
+            return 'All test phases completed successfully';
+
+        case 'test_failed':
+            return data.error ? `Test failed: ${data.error}` : 'Test failed';
+
+        case 'phase_progress':
+            if (data.completed_angles !== undefined && data.total_angles !== undefined) {
+                return `Progress: ${data.completed_angles}/${data.total_angles} angles completed`;
+            } else if (data.completed_positions !== undefined && data.total_positions !== undefined) {
+                return `Progress: ${data.completed_positions}/${data.total_positions} positions completed`;
+            }
+            return 'Test in progress...';
+
+        default:
+            // For any unhandled events, only show if there's meaningful data (excluding test_step_id)
+            const filteredData = { ...data };
+            delete filteredData.test_step_id;
+            delete filteredData.timestamp;
+
+            const keys = Object.keys(filteredData);
+            if (keys.length === 0) {
+                return '';
+            }
+
+            // Format remaining data in a readable way
+            return keys.map(key => `${key}: ${filteredData[key]}`).join(', ');
+    }
+}
+
 export default function TestingPattern1() {
     const navigate = useNavigate();
     const { state: locationState } = useLocation();
     const data = locationState as (Test | TestDB & { resuming?: boolean }) | undefined;
 
-    if (!data) return <Navigate to="/controlpanel" replace />;
-
+    // All hooks must be called before any conditional returns
     const {
         isRunning,
         isPaused,
         currentPhase,
         boundaryResults,
+        tangentialResults,
+        radialResults,
         awaitingContinuation,
         phaseProgress,
         events,
@@ -67,16 +159,18 @@ export default function TestingPattern1() {
         radialTestCompleted,
         startTest,
         startTestPhase,
-        resumeFromState,
         loadTestHistory,
         pauseTest,
         resumeTest,
-        stopTest
+        stopTest,
+        fetchState
     } = useMasterTest();
 
-    const liveStatus = status || data.status || 'PLANNED';
-    const isCompleted = liveStatus === 'COMPLETED';
     const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+
+    // Derived state (safe to use data here because hooks are already called)
+    const liveStatus = status || data?.status || 'PLANNED';
+    const isCompleted = liveStatus === 'COMPLETED';
 
     // Debug logging
     useEffect(() => {
@@ -95,18 +189,60 @@ export default function TestingPattern1() {
         console.log("=".repeat(60));
     }, [isRunning, isPaused, isCompleted, awaitingContinuation, connected, liveStatus, data]);
 
-    // Handle resuming from history or loading historical data
+    // Handle loading test state on mount
     useEffect(() => {
-        if (data.test_id) {
-            if ('resuming' in data && data.resuming) {
-                // Resume the test execution
-                resumeFromState(data.test_id);
-            } else if (data.status && data.status !== 'PLANNED') {
-                // Just viewing - load historical data
-                loadTestHistory(data.test_id);
+        const loadTestState = async () => {
+            if (data?.test_id) {
+                // Always load historical data first to show what's been done
+                if (data.status && data.status !== 'PLANNED') {
+                    await loadTestHistory(data.test_id);
+                }
+
+                // Check current orchestrator state
+                await fetchState();
+
+                // If orchestrator has no state but database does, restore from database
+                // This handles the case where server restarted or orchestrator lost state
+                try {
+                    const dbStateRes = await api.get(`/api/test/${data.test_id}/state`);
+                    if (dbStateRes.data) {
+                        // If test is awaiting selection (or was stopped mid-phase), restore orchestrator state
+                        // This ensures the buttons work correctly and user can restart/continue
+                        if (dbStateRes.data.awaiting_test_selection) {
+                            console.log("[TestingPattern1] Test awaiting selection, restoring orchestrator state from database");
+                            console.log("[TestingPattern1] Current phase:", dbStateRes.data.current_phase);
+
+                            try {
+                                await api.post('/api/master-test/resume-from-database', {
+                                    test_id: data.test_id
+                                });
+
+                                console.log("[TestingPattern1] Orchestrator state restored, waiting for SSE event");
+
+                                // Wait a bit for SSE event to propagate and modal/buttons to appear
+                                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                                // Refresh state to get updated orchestrator state
+                                await fetchState();
+
+                                console.log("[TestingPattern1] State refreshed after restore");
+                            } catch (err) {
+                                console.error("[TestingPattern1] Error restoring state:", err);
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.error("[TestingPattern1] Error checking/restoring state:", err);
+                }
             }
-        }
-    }, []);
+        };
+
+        loadTestState();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [data?.test_id]); // fetchState and loadTestHistory are stable from hook
+
+    // Early return after all hooks
+    if (!data) return <Navigate to="/controlpanel" replace />;
 
     const getStatusColor = () => {
         switch (liveStatus) {
@@ -202,8 +338,33 @@ export default function TestingPattern1() {
             });
             console.log("✅ Test started successfully!");
             setConfirmModalOpen(false);
-        } catch (error) {
+        } catch (error: unknown) {
             console.error("❌ Failed to start test:", error);
+            setConfirmModalOpen(false);
+
+            // Check if test has existing state (axios error type checking)
+            const axiosError = error as { response?: { status?: number; data?: { awaiting_test_selection?: boolean; boundary_detection_completed?: boolean; tangential_test_completed?: boolean; radial_test_completed?: boolean } } };
+            if (axiosError?.response?.status === 409 && axiosError?.response?.data?.awaiting_test_selection) {
+                Modal.warning({
+                    title: "Test Already in Progress",
+                    content: (
+                        <div>
+                            <p>This test has already completed boundary detection and is awaiting test selection.</p>
+                            <p><strong>Completed phases:</strong></p>
+                            <ul>
+                                <li>Boundary Detection: {axiosError.response?.data?.boundary_detection_completed ? '✓ Complete' : '○ Pending'}</li>
+                                <li>Tangential Test: {axiosError.response?.data?.tangential_test_completed ? '✓ Complete' : '○ Pending'}</li>
+                                <li>Radial Test: {axiosError.response?.data?.radial_test_completed ? '✓ Complete' : '○ Pending'}</li>
+                            </ul>
+                            <p>Please use the "Start Tangential Test" or "Start Radial Test" buttons to continue.</p>
+                        </div>
+                    ),
+                    okText: "Got it"
+                });
+                // Reload state to show proper buttons
+                await fetchState();
+                await loadTestHistory(data.test_id);
+            }
         }
     };
 
@@ -388,9 +549,9 @@ export default function TestingPattern1() {
                         </Row>
                         <Progress
                             percent={
-                                phaseProgress.total_angles
+                                phaseProgress.total_angles && phaseProgress.completed_angles !== undefined
                                     ? Math.round((phaseProgress.completed_angles / phaseProgress.total_angles) * 100)
-                                    : phaseProgress.total_positions
+                                    : phaseProgress.total_positions && phaseProgress.completed_positions !== undefined
                                         ? Math.round((phaseProgress.completed_positions / phaseProgress.total_positions) * 100)
                                         : 0
                             }
@@ -440,6 +601,96 @@ export default function TestingPattern1() {
                     </Card>
                 )}
 
+                {/* Tangential Test Results */}
+                {tangentialResults.length > 0 && (
+                    <Card
+                        title={`Tangential Test Results (${tangentialResults.length} measurements)`}
+                        style={{ marginBottom: 16 }}
+                        extra={
+                            <Text type="secondary">
+                                {tangentialResults.filter(r => r.detected).length} detected
+                            </Text>
+                        }
+                    >
+                        <div style={{ maxHeight: '400px', overflow: 'auto' }}>
+                            <List
+                                size="small"
+                                grid={{ gutter: 8, xs: 2, sm: 3, md: 4, lg: 6, xl: 6 }}
+                                dataSource={tangentialResults}
+                                renderItem={(result) => (
+                                    <List.Item>
+                                        <Card
+                                            size="small"
+                                            style={{
+                                                background: result.detected ? '#f6ffed' : '#fff2e8',
+                                                border: result.detected ? '1px solid #b7eb8f' : '1px solid #ffd591'
+                                            }}
+                                        >
+                                            <Statistic
+                                                title={`${result.angle}°`}
+                                                value={result.distance.toFixed(2)}
+                                                suffix="m"
+                                                prefix={result.detected ? <CheckCircleOutlined style={{ color: '#52c41a' }} /> : null}
+                                                valueStyle={{ fontSize: 14 }}
+                                            />
+                                            {result.offset_from_boundary !== undefined && (
+                                                <Text type="secondary" style={{ fontSize: 11 }}>
+                                                    +{result.offset_from_boundary.toFixed(1)}m from boundary
+                                                </Text>
+                                            )}
+                                        </Card>
+                                    </List.Item>
+                                )}
+                            />
+                        </div>
+                    </Card>
+                )}
+
+                {/* Radial Test Results */}
+                {radialResults.length > 0 && (
+                    <Card
+                        title={`Radial Test Results (${radialResults.length} measurements)`}
+                        style={{ marginBottom: 16 }}
+                        extra={
+                            <Text type="secondary">
+                                {radialResults.filter(r => r.detected).length} detected
+                            </Text>
+                        }
+                    >
+                        <div style={{ maxHeight: '400px', overflow: 'auto' }}>
+                            <List
+                                size="small"
+                                grid={{ gutter: 8, xs: 2, sm: 3, md: 4, lg: 6, xl: 6 }}
+                                dataSource={radialResults}
+                                renderItem={(result) => (
+                                    <List.Item>
+                                        <Card
+                                            size="small"
+                                            style={{
+                                                background: result.detected ? '#f6ffed' : '#fff2e8',
+                                                border: result.detected ? '1px solid #b7eb8f' : '1px solid #ffd591'
+                                            }}
+                                        >
+                                            <Statistic
+                                                title={`${result.angle}°`}
+                                                value={result.distance.toFixed(2)}
+                                                suffix="m"
+                                                prefix={result.detected ? <CheckCircleOutlined style={{ color: '#52c41a' }} /> : null}
+                                                valueStyle={{ fontSize: 14 }}
+                                            />
+                                            {result.offset_from_boundary !== undefined && (
+                                                <Text type="secondary" style={{ fontSize: 11 }}>
+                                                    +{result.offset_from_boundary.toFixed(1)}m from boundary
+                                                </Text>
+                                            )}
+                                        </Card>
+                                    </List.Item>
+                                )}
+                            />
+                        </div>
+                    </Card>
+                )}
+
                 {/* Event Log */}
                 <Card title="Event Log" extra={<Text type="secondary">{events.length} events</Text>}>
                     <List
@@ -466,15 +717,7 @@ export default function TestingPattern1() {
                                         {formatEventType(event.type)}
                                     </Tag>
                                     <Text style={{ fontSize: 12, flex: 1 }}>
-                                        {event.type === 'test_log' && event.data.message
-                                            ? event.data.message
-                                            : event.type === 'boundary_found_at_angle' && event.data.boundary
-                                                ? `Angle ${event.data.angle}°: ${event.data.boundary.toFixed(2)}m boundary detected`
-                                                : event.type === 'movement_started' && event.data.angle !== undefined
-                                                    ? `Moving to angle ${event.data.angle}°, distance ${event.data.distance}m (attempt ${event.data.attempt})`
-                                                    : JSON.stringify(event.data).length > 2
-                                                        ? JSON.stringify(event.data).slice(0, 150) + (JSON.stringify(event.data).length > 150 ? '...' : '')
-                                                        : ''}
+                                        {formatEventData(event)}
                                     </Text>
                                 </div>
                             </List.Item>
