@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../Components/apiAxios";
 import { message, Modal } from "antd";
 
-export type TestPhase = 'BOUNDARY_DETECTION' | 'COMPLIANCE_TEST' | 'COMPLETED';
+export type TestPhase = 'BOUNDARY_DETECTION' | 'TANGENTIAL_TEST' | 'RADIAL_TEST' | 'COMPLETED';
+type TestStatus = 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'PAUSED' | 'ERROR';
 
 export interface MasterTestConfiguration {
     test_id: number;
@@ -35,6 +36,10 @@ export interface TestState {
     current_phase: TestPhase;
     boundary_results: BoundaryResult[];
     awaiting_user_confirmation: boolean;
+    awaiting_test_selection?: boolean;
+    boundary_detection_completed?: boolean;
+    tangential_test_completed?: boolean;
+    radial_test_completed?: boolean;
 }
 
 export interface TestEvent {
@@ -45,14 +50,21 @@ export interface TestEvent {
 
 export function useMasterTest() {
     const [isRunning, setIsRunning] = useState(false);
+    const [isPaused, setIsPaused] = useState(false);
     const [currentPhase, setCurrentPhase] = useState<TestPhase | null>(null);
     const [testState, setTestState] = useState<TestState | null>(null);
     const [boundaryResults, setBoundaryResults] = useState<BoundaryResult[]>([]);
     const [awaitingContinuation, setAwaitingContinuation] = useState(false);
+    const [status, setStatus] = useState<TestStatus>('PLANNED');
     const [events, setEvents] = useState<TestEvent[]>([]);
     const [connected, setConnected] = useState(false);
     const [phaseProgress, setPhaseProgress] = useState<any>(null);
     const eventSourceRef = useRef<EventSource | null>(null);
+
+    // Phase completion tracking
+    const [boundaryDetectionCompleted, setBoundaryDetectionCompleted] = useState(false);
+    const [tangentialTestCompleted, setTangentialTestCompleted] = useState(false);
+    const [radialTestCompleted, setRadialTestCompleted] = useState(false);
 
     /**
      * Connect to SSE stream
@@ -69,7 +81,9 @@ export function useMasterTest() {
         eventSource.addEventListener("test_started", (e) => {
             const data = JSON.parse(e.data);
             setIsRunning(true);
+            setIsPaused(false);
             setCurrentPhase(data.phase);
+            setStatus('IN_PROGRESS');
             addEvent("test_started", data);
             message.success(`Test ${data.test_id} started - Phase: ${data.phase}`);
         });
@@ -77,10 +91,18 @@ export function useMasterTest() {
         eventSource.addEventListener("boundary_detection_completed", (e) => {
             const data = JSON.parse(e.data);
             setIsRunning(false);
+            setIsPaused(false);
             setBoundaryResults(data.boundary_results);
+            setBoundaryDetectionCompleted(true);
             setAwaitingContinuation(true);
+            setStatus('PAUSED');
+
+            // Track phase completions from event data
+            if (data.tangential_completed) setTangentialTestCompleted(true);
+            if (data.radial_completed) setRadialTestCompleted(true);
+
             addEvent("boundary_detection_completed", data);
-            
+
             // Show modal asking user to continue
             showContinuationModal(data);
         });
@@ -88,16 +110,58 @@ export function useMasterTest() {
         eventSource.addEventListener("compliance_test_started", (e) => {
             const data = JSON.parse(e.data);
             setIsRunning(true);
-            setCurrentPhase('COMPLIANCE_TEST');
+            setCurrentPhase('TANGENTIAL_TEST'); // Default to tangential for legacy
             setAwaitingContinuation(false);
+            setIsPaused(false);
+            setStatus('IN_PROGRESS');
             addEvent("compliance_test_started", data);
             message.success("Starting compliance test phase");
+        });
+
+        eventSource.addEventListener("tangential_test_started", (e) => {
+            const data = JSON.parse(e.data);
+            setIsRunning(true);
+            setCurrentPhase('TANGENTIAL_TEST');
+            setAwaitingContinuation(false);
+            setIsPaused(false);
+            setStatus('IN_PROGRESS');
+            addEvent("tangential_test_started", data);
+            message.success("Starting tangential test phase");
+        });
+
+        eventSource.addEventListener("radial_test_started", (e) => {
+            const data = JSON.parse(e.data);
+            setIsRunning(true);
+            setCurrentPhase('RADIAL_TEST');
+            setAwaitingContinuation(false);
+            setIsPaused(false);
+            setStatus('IN_PROGRESS');
+            addEvent("radial_test_started", data);
+            message.success("Starting radial test phase");
+        });
+
+        eventSource.addEventListener("phase_completed_awaiting_next", (e) => {
+            const data = JSON.parse(e.data);
+            setIsRunning(false);
+            setAwaitingContinuation(true);
+            setStatus('PAUSED');
+
+            // Track phase completions
+            if (data.tangential_completed) setTangentialTestCompleted(true);
+            if (data.radial_completed) setRadialTestCompleted(true);
+
+            addEvent("phase_completed_awaiting_next", data);
+
+            // Show modal for next test
+            showContinuationModal(data);
         });
 
         eventSource.addEventListener("test_completed", (e) => {
             const data = JSON.parse(e.data);
             setIsRunning(false);
             setCurrentPhase('COMPLETED');
+            setIsPaused(false);
+            setStatus('COMPLETED');
             addEvent("test_completed", data);
             message.success(`Test ${data.test_id} completed successfully!`);
         });
@@ -105,22 +169,33 @@ export function useMasterTest() {
         eventSource.addEventListener("test_failed", (e) => {
             const data = JSON.parse(e.data);
             setIsRunning(false);
+            setIsPaused(false);
+            setStatus('ERROR');
             addEvent("test_failed", data);
             message.error(`Test failed: ${data.error}`);
         });
 
         eventSource.addEventListener("test_paused", () => {
+            setIsPaused(true);
+            setIsRunning(false);
+            setStatus('PAUSED');
             addEvent("test_paused", {});
             message.info("Test paused");
         });
 
         eventSource.addEventListener("test_resumed", () => {
+            setIsPaused(false);
+            setIsRunning(true);
+            setStatus('IN_PROGRESS');
             addEvent("test_resumed", {});
             message.info("Test resumed");
         });
 
         eventSource.addEventListener("test_stopped", () => {
             setIsRunning(false);
+            setIsPaused(false);
+            setAwaitingContinuation(false);
+            setStatus('PAUSED');
             addEvent("test_stopped", {});
             message.info("Test stopped");
         });
@@ -154,10 +229,15 @@ export function useMasterTest() {
         eventSource.addEventListener("detection", (e) => {
             const data = JSON.parse(e.data);
             addEvent("detection", data);
-            
+
             if (data.detected) {
                 message.info("Detection event received", 1);
             }
+        });
+
+        eventSource.addEventListener("test_log", (e) => {
+            const data = JSON.parse(e.data);
+            addEvent("test_log", data);
         });
 
         eventSource.onerror = (error) => {
@@ -172,25 +252,75 @@ export function useMasterTest() {
      * Show modal asking user to continue to compliance test
      */
     const showContinuationModal = (data: any) => {
-        Modal.confirm({
-            title: "Boundary Detection Complete",
-            content: (
-                <div>
-                    <p>{data.message}</p>
-                    <p>Detected boundaries at {data.boundary_results.length} angles.</p>
-                    <p>Would you like to continue with the compliance test phase?</p>
-                </div>
-            ),
-            okText: "Continue to Compliance Test",
-            cancelText: "Stop Here",
-            onOk: async () => {
-                await continueToCompliance();
-            },
-            onCancel: () => {
-                message.info("Test stopped at boundary detection phase");
-                setAwaitingContinuation(false);
-            }
-        });
+        // Determine which tests are still pending
+        const tangentialPending = !data.tangential_completed;
+        const radialPending = !data.radial_completed;
+
+        if (tangentialPending && radialPending) {
+            // Both tests pending - ask user which to start first
+            Modal.confirm({
+                title: "Boundary Detection Complete",
+                content: (
+                    <div>
+                        <p>{data.message}</p>
+                        <p>Detected boundaries at {data.boundary_results.length} angles.</p>
+                        <p style={{ marginTop: 16, fontWeight: '500' }}>Which test would you like to run first?</p>
+                        <ul style={{ marginTop: 8 }}>
+                            <li><strong>Tangential Test:</strong> Sweeps around at fixed radii (2m, 3m) in 15° increments</li>
+                            <li><strong>Radial Test:</strong> Tests at boundary + 2m and boundary + 3m for all detected angles</li>
+                        </ul>
+                    </div>
+                ),
+                okText: "Start Tangential Test",
+                cancelText: "Start Radial Test",
+                onOk: async () => {
+                    await startTestPhase('TANGENTIAL');
+                },
+                onCancel: async () => {
+                    await startTestPhase('RADIAL');
+                }
+            });
+        } else if (tangentialPending) {
+            // Only tangential pending
+            Modal.confirm({
+                title: "Radial Test Complete",
+                content: (
+                    <div>
+                        <p>Radial test completed successfully!</p>
+                        <p>Would you like to continue with the Tangential test?</p>
+                    </div>
+                ),
+                okText: "Start Tangential Test",
+                cancelText: "Stop Here",
+                onOk: async () => {
+                    await startTestPhase('TANGENTIAL');
+                },
+                onCancel: () => {
+                    message.info("Test stopped after radial phase");
+                    setAwaitingContinuation(false);
+                }
+            });
+        } else if (radialPending) {
+            // Only radial pending
+            Modal.confirm({
+                title: "Tangential Test Complete",
+                content: (
+                    <div>
+                        <p>Tangential test completed successfully!</p>
+                        <p>Would you like to continue with the Radial test?</p>
+                    </div>
+                ),
+                okText: "Start Radial Test",
+                cancelText: "Stop Here",
+                onOk: async () => {
+                    await startTestPhase('RADIAL');
+                },
+                onCancel: () => {
+                    message.info("Test stopped after tangential phase");
+                    setAwaitingContinuation(false);
+                }
+            });
+        }
     };
 
     /**
@@ -222,17 +352,42 @@ export function useMasterTest() {
      * Start a new master test
      */
     const startTest = useCallback(async (config: MasterTestConfiguration) => {
+        console.log("=".repeat(60));
+        console.log("📡 [Hook] startTest called");
+        console.log("=".repeat(60));
+        console.log("Config:", config);
+        console.log("API URL:", "/api/master-test/start");
+
         try {
-            await api.post("/api/master-test/start", config);
+            console.log("📤 Sending POST request...");
+            const response = await api.post("/api/master-test/start", config);
+            console.log("✅ Response received:", response.data);
             // Status will be updated via SSE
         } catch (err: any) {
+            console.error("❌ API Error:", err);
+            console.error("Error response:", err?.response?.data);
             message.error(err?.response?.data?.error || "Failed to start test");
             throw err;
         }
     }, []);
 
     /**
-     * Continue to compliance test phase
+     * Start a specific test phase (tangential or radial)
+     */
+    const startTestPhase = useCallback(async (testType: 'TANGENTIAL' | 'RADIAL') => {
+        try {
+            await api.post("/api/master-test/start-phase", { test_type: testType });
+            setAwaitingContinuation(false);
+            message.success(`Starting ${testType.toLowerCase()} test`);
+        } catch (err: any) {
+            message.error(err?.response?.data?.error || `Failed to start ${testType.toLowerCase()} test`);
+            throw err;
+        }
+    }, []);
+
+    /**
+     * Continue to compliance test phase (legacy)
+     * @deprecated Use startTestPhase instead
      */
     const continueToCompliance = useCallback(async () => {
         try {
@@ -245,10 +400,70 @@ export function useMasterTest() {
     }, []);
 
     /**
+     * Load historical test data (steps, boundary results, progress)
+     */
+    const loadTestHistory = useCallback(async (test_id: number) => {
+        try {
+            // Load test state
+            const stateRes = await api.get(`/api/test/${test_id}/state`);
+            if (stateRes.data) {
+                setCurrentPhase(stateRes.data.current_phase);
+                if (stateRes.data.boundary_results) {
+                    const results = JSON.parse(stateRes.data.boundary_results);
+                    setBoundaryResults(results);
+                }
+                setAwaitingContinuation(stateRes.data.awaiting_confirmation || stateRes.data.awaiting_test_selection || false);
+
+                // Set phase completion status
+                setBoundaryDetectionCompleted(stateRes.data.boundary_detection_completed || false);
+                setTangentialTestCompleted(stateRes.data.tangential_test_completed || false);
+                setRadialTestCompleted(stateRes.data.radial_test_completed || false);
+
+                // Set phase progress
+                if (stateRes.data.current_phase === 'BOUNDARY_DETECTION' || stateRes.data.boundary_results) {
+                    const results = stateRes.data.boundary_results ? JSON.parse(stateRes.data.boundary_results) : [];
+                    setPhaseProgress({
+                        phase: stateRes.data.current_phase || 'BOUNDARY_DETECTION',
+                        completed_angles: results.length,
+                        total_angles: 36
+                    });
+                }
+            }
+
+            // Load test steps and convert to events
+            const stepsRes = await api.get(`/api/test/${test_id}/steps`);
+            if (stepsRes.data && stepsRes.data.length > 0) {
+                const historicalEvents: TestEvent[] = stepsRes.data.map((step: any) => ({
+                    type: 'test_log',
+                    data: {
+                        message: `Step ${step.sequence_no}: ${step.step_type} at angle ${step.angle}°, distance ${step.distance_1}m - ${step.status}`
+                    },
+                    timestamp: step.started_at || new Date().toISOString()
+                }));
+                setEvents(historicalEvents.reverse().slice(0, 100));
+            }
+
+            // Load summary for progress
+            const summaryRes = await api.get(`/api/test/${test_id}/steps/summary`);
+            if (summaryRes.data) {
+                // This data can be used for additional progress indicators if needed
+                console.log("Test summary loaded:", summaryRes.data);
+            }
+        } catch (err: any) {
+            console.error("Failed to load test history:", err);
+            message.warning("Some historical data could not be loaded");
+        }
+    }, []);
+
+    /**
      * Resume test from saved state
      */
     const resumeFromState = useCallback(async (test_id: number) => {
         try {
+            // First load the historical data
+            await loadTestHistory(test_id);
+
+            // Then resume the test execution
             await api.post("/api/master-test/resume", { test_id });
             message.success("Test state loaded");
             // State will be updated via SSE
@@ -256,7 +471,7 @@ export function useMasterTest() {
             message.error(err?.response?.data?.error || "Failed to resume test");
             throw err;
         }
-    }, []);
+    }, [loadTestHistory]);
 
     /**
      * Pause the current test
@@ -301,12 +516,23 @@ export function useMasterTest() {
         try {
             const res = await api.get<{ 
                 is_running: boolean; 
+                is_paused: boolean;
                 current_test: MasterTestConfiguration | null;
                 state: TestState | null;
             }>("/api/master-test/state");
             
             setIsRunning(res.data.is_running);
+            setIsPaused(res.data.is_paused);
             setTestState(res.data.state);
+            if (res.data.state?.current_phase === 'COMPLETED') {
+                setStatus('COMPLETED');
+            } else if (res.data.is_running) {
+                setStatus('IN_PROGRESS');
+            } else if (res.data.is_paused || res.data.state) {
+                setStatus('PAUSED');
+            } else {
+                setStatus('PLANNED');
+            }
             
             if (res.data.state) {
                 setCurrentPhase(res.data.state.current_phase);
@@ -337,16 +563,23 @@ export function useMasterTest() {
 
     return {
         isRunning,
+        isPaused,
         currentPhase,
         testState,
         boundaryResults,
         awaitingContinuation,
+        status,
         phaseProgress,
         events,
         connected,
+        boundaryDetectionCompleted,
+        tangentialTestCompleted,
+        radialTestCompleted,
         startTest,
+        startTestPhase,
         continueToCompliance,
         resumeFromState,
+        loadTestHistory,
         pauseTest,
         resumeTest,
         stopTest,
