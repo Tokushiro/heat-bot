@@ -1,8 +1,8 @@
 import { useNavigate } from "react-router-dom";
-import { Layout, Typography, Button, Space, Tag, Empty, message, Progress, Statistic, Row, Col, Divider } from "antd";
+import { Layout, Typography, Button, Space, Tag, Empty, message, Progress, Statistic, Row, Col, Divider, Popconfirm } from "antd";
 import { LeftOutlined, PlayCircleOutlined, DownOutlined, CheckCircleOutlined, ClockCircleOutlined, EnvironmentOutlined, DownloadOutlined } from "@ant-design/icons";
 import type { TestDB } from "../Components/testCard.tsx";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import type {Test} from "../Types/test.ts";
 import { api } from "../Components/apiAxios.ts";
 
@@ -94,13 +94,11 @@ export default function HistoryPage() {
     const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
     const [testSteps, setTestSteps] = useState<Record<number, TestStepSummary>>({});
 
-    useEffect(() => {
-        fetchTests();
-    }, []);
-
-    const fetchTests = async () => {
+    const fetchTests = useCallback(async (showLoading = true) => {
         try {
-            setLoading(true);
+            if (showLoading) {
+                setLoading(true);
+            }
             const res = await api.get<Test[]>(`/api/test`);
 
             // Get test states and step summaries for each test
@@ -147,7 +145,18 @@ export default function HistoryPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
+
+    useEffect(() => {
+        fetchTests(true); // Show loading on initial fetch
+
+        // Auto-refresh every 3 seconds to keep history updated during test execution
+        const interval = setInterval(() => {
+            fetchTests(false); // Don't show loading on auto-refresh to avoid flickering
+        }, 3000);
+
+        return () => clearInterval(interval);
+    }, [fetchTests]);
 
     const fetchTestSteps = async (test_id: number) => {
         try {
@@ -828,13 +837,23 @@ export default function HistoryPage() {
                                                         >
                                                             Export CSV
                                                         </Button>
-                                                        <Button
-                                                            danger
-                                                            onClick={() => handleDelete(item.test_id)}
-                                                            loading={deleting === item.test_id}
+                                                        <Popconfirm
+                                                            title="Delete this test?"
+                                                            description="This will permanently delete the test and all associated data. This action cannot be undone."
+                                                            okText="Delete"
+                                                            cancelText="Cancel"
+                                                            okButtonProps={{ danger: true, loading: deleting === item.test_id }}
+                                                            onConfirm={() => handleDelete(item.test_id)}
+                                                            disabled={deleting === item.test_id}
                                                         >
-                                                            Delete
-                                                        </Button>
+                                                            <Button
+                                                                danger
+                                                                loading={deleting === item.test_id}
+                                                                disabled={deleting === item.test_id}
+                                                            >
+                                                                Delete
+                                                            </Button>
+                                                        </Popconfirm>
                                                     </Space>
                                                 </div>
                                             </div>

@@ -811,7 +811,7 @@ export class MasterTestOrchestrator extends EventEmitter {
                 if (this.isPaused) await this.waitForResume();
                 this.ensureNotStopped();
 
-                await this.testPositionWithRepeats(
+                const detected = await this.testPositionWithRepeats(
                     config.test_id,
                     'COMPLIANCE_TANGENTIAL',
                     angle,
@@ -820,6 +820,14 @@ export class MasterTestOrchestrator extends EventEmitter {
                     config.detection_wait_time || 2000,
                     config.repeat_measurements || 2
                 );
+
+                // Emit compliance measurement event for client to track results
+                this.emit("compliance_measurement_completed", {
+                    test_id: config.test_id,
+                    angle,
+                    distance: testDistance,
+                    detected
+                });
 
                 completedCount++;
                 this.testState!.completed_step_count++;
@@ -945,7 +953,7 @@ export class MasterTestOrchestrator extends EventEmitter {
             if (this.isPaused) await this.waitForResume();
             this.ensureNotStopped();
 
-            await this.testPositionWithRepeats(
+            const detected = await this.testPositionWithRepeats(
                 test_id,
                 'COMPLIANCE_TANGENTIAL',
                 angle,
@@ -954,6 +962,14 @@ export class MasterTestOrchestrator extends EventEmitter {
                 waitTime,
                 repeatCount
             );
+
+            // Emit compliance measurement event for client to track results
+            this.emit("compliance_measurement_completed", {
+                test_id,
+                angle,
+                distance: radius,
+                detected
+            });
         }
     }
 

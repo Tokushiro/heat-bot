@@ -47,7 +47,7 @@ function formatEventType(eventType: string): string {
     }
 }
 
-// Format event data to natural language (no JSON, no test_step_id)
+// Format event data to natural language
 function formatEventData(event: any): string {
     const data = event.data;
 
@@ -122,7 +122,6 @@ function formatEventData(event: any): string {
             return 'Test in progress...';
 
         default:
-            // For any unhandled events, only show if there's meaningful data (excluding test_step_id)
             const filteredData = { ...data };
             delete filteredData.test_step_id;
             delete filteredData.timestamp;
@@ -132,7 +131,7 @@ function formatEventData(event: any): string {
                 return '';
             }
 
-            // Format remaining data in a readable way
+
             return keys.map(key => `${key}: ${filteredData[key]}`).join(', ');
     }
 }
@@ -615,12 +614,12 @@ export default function TestingPattern1() {
                         {/* Show "Start Test" only when:
                             - No test is currently running
                             - Not awaiting user selection (test phase continuation)
-                            - No boundary results exist (test hasn't started yet)
+                            - Test hasn't started yet OR was stopped (allow restart)
                             - Test is not completed
                         */}
-                        {!isRunning && !awaitingContinuation && boundaryResults.length === 0 && !isCompleted && (
+                        {!isRunning && !isPaused && !awaitingContinuation && !isCompleted && (
                             <Button color="primary" variant="solid" onClick={handleStart}>
-                                Start Test
+                                {boundaryResults.length > 0 ? 'Restart Test' : 'Start Test'}
                             </Button>
                         )}
 
