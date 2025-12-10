@@ -267,10 +267,12 @@ export default function ManualControl() {
                     {/* LOGS CARD */}
                     <Card
                         style={{ width: "80vh", height: "80vh", overflow: "hidden" }}
-                        bodyStyle={{
-                            height: "100%",
-                            display: "flex",
-                            flexDirection: "column",
+                        styles={{
+                            body: {
+                                height: "100%",
+                                display: "flex",
+                                flexDirection: "column",
+                            }
                         }}
                     >
                         <Title level={5} style={{ marginBottom: 0 }}>
@@ -290,6 +292,7 @@ export default function ManualControl() {
                             <Space direction="vertical" size="middle" style={{ width: "100%" }}>
                                 {logs.map((l) => (
                                     <LogCard
+                                        key={l.id}
                                         tag={l.tag}
                                         information={l.information}
                                         tagColour={l.tagColour}
@@ -302,10 +305,12 @@ export default function ManualControl() {
                     {/* D-PAD CARD */}
                     <Card
                         style={{ width: "80vh", height: "80vh", overflow: "hidden" }}
-                        bodyStyle={{
-                            height: "100%",
-                            display: "flex",
-                            flexDirection: "column",
+                        styles={{
+                            body: {
+                                height: "100%",
+                                display: "flex",
+                                flexDirection: "column",
+                            }
                         }}
                     >
                         <Title level={5} style={{ marginBottom: 0 }}>

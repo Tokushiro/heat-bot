@@ -23,7 +23,7 @@ export function ModeCard({
         <Card
             hoverable
             style={{ height: "100%", borderRadius: 12, boxShadow: "0 6px 18px rgba(0,0,0,0.06)" }}
-            bodyStyle={{ padding: 24 }}
+            styles={{ body: { padding: 24 } }}
         >
             <Space direction="vertical" size="middle" style={{ width: "100%" }} align="center">
                 <Avatar size={48} icon={icon} style={{ background: "#e6f4ff" }} />

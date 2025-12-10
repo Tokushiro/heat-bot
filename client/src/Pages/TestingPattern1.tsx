@@ -1,5 +1,5 @@
-import { Layout, Button, Space, Tag, Typography, Card, Progress, List, Statistic, Row, Col, Modal } from "antd";
-import { LeftOutlined, CheckCircleOutlined } from "@ant-design/icons";
+import { Layout, Button, Space, Tag, Typography, Card, Progress, List, Statistic, Row, Col, Modal, Steps } from "antd";
+import { LeftOutlined, CheckCircleOutlined, ClockCircleOutlined, DownloadOutlined } from "@ant-design/icons";
 import { useNavigate, useLocation, Navigate } from "react-router-dom";
 import type { Test } from "../Types/test.ts"
 import type { TestDB } from "../Components/testCard.tsx";
@@ -85,7 +85,7 @@ function formatEventData(event: any): string {
         case 'compliance_measurement_completed':
             if (data.angle !== undefined && data.distance !== undefined) {
                 const detected = data.detected ? '✓ Detected' : '✗ No detection';
-                const offset = data.offset_from_boundary ? ` (+${data.offset_from_boundary.toFixed(1)}m from boundary)` : '';
+                const offset = data.offset_from_boundary ? ` (${data.offset_from_boundary.toFixed(1)}m inside boundary)` : '';
                 return `Angle ${data.angle}°, distance ${data.distance}m${offset}: ${detected}`;
             }
             return 'Measurement completed';
@@ -137,6 +137,32 @@ function formatEventData(event: any): string {
     }
 }
 
+// Export utility functions
+function downloadCSV(filename: string, csvContent: string) {
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+function downloadJSON(filename: string, data: any) {
+    const jsonContent = JSON.stringify(data, null, 2);
+    const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
 export default function TestingPattern1() {
     const navigate = useNavigate();
     const { state: locationState } = useLocation();
@@ -155,6 +181,7 @@ export default function TestingPattern1() {
         events,
         connected,
         status,
+        boundaryDetectionCompleted,
         tangentialTestCompleted,
         radialTestCompleted,
         startTest,
@@ -256,14 +283,33 @@ export default function TestingPattern1() {
     };
 
     const getStatusDisplay = () => {
-        switch (liveStatus) {
-            case 'IN_PROGRESS': return 'In Progress';
-            case 'COMPLETED': return 'Completed';
-            case 'ERROR': return 'Error';
-            case 'PAUSED': return 'Paused';
-            case 'PLANNED':
-            default: return 'Planned';
+        // More descriptive status messages based on current state
+        if (liveStatus === 'COMPLETED') return 'All Tests Complete';
+        if (liveStatus === 'ERROR') return 'Test Failed';
+
+        if (awaitingContinuation) {
+            if (tangentialTestCompleted && radialTestCompleted) {
+                return 'All Tests Complete';
+            } else if (tangentialTestCompleted) {
+                return 'Awaiting Radial Test';
+            } else if (radialTestCompleted) {
+                return 'Awaiting Tangential Test';
+            } else if (boundaryDetectionCompleted) {
+                return 'Awaiting Test Selection';
+            }
         }
+
+        if (isRunning) {
+            if (currentPhase === 'BOUNDARY_DETECTION') return 'Running Boundary Detection';
+            if (currentPhase === 'TANGENTIAL_TEST') return 'Running Tangential Test';
+            if (currentPhase === 'RADIAL_TEST') return 'Running Radial Test';
+            return 'Test In Progress';
+        }
+
+        if (isPaused) return 'Paused';
+        if (liveStatus === 'PLANNED') return 'Ready to Start';
+
+        return liveStatus;
     };
 
     const getPhaseDisplay = () => {
@@ -418,6 +464,110 @@ export default function TestingPattern1() {
         }
     };
 
+    // Export handlers
+    const handleExportBoundaryCSV = () => {
+        const csv = [
+            'Angle (degrees),Detection Boundary (m),Detected Distance (m),No Detection Distance (m)',
+            ...boundaryResults.map(r =>
+                `${r.angle},${r.detection_boundary ?? 'N/A'},${r.detected_distance ?? 'N/A'},${r.no_detection_distance ?? 'N/A'}`
+            )
+        ].join('\n');
+        downloadCSV(`${data.test_name}_boundary_results.csv`, csv);
+    };
+
+    const handleExportBoundaryJSON = () => {
+        downloadJSON(`${data.test_name}_boundary_results.json`, {
+            test_name: data.test_name,
+            test_id: data.test_id,
+            export_date: new Date().toISOString(),
+            phase: 'Boundary Detection',
+            results: boundaryResults
+        });
+    };
+
+    const handleExportTangentialCSV = () => {
+        const csv = [
+            'Angle (degrees),Distance (m),Offset from Boundary (m),Detected',
+            ...tangentialResults.map(r =>
+                `${r.angle},${r.distance.toFixed(2)},${r.offset_from_boundary?.toFixed(2) ?? 'N/A'},${r.detected ? 'Yes' : 'No'}`
+            )
+        ].join('\n');
+        downloadCSV(`${data.test_name}_tangential_results.csv`, csv);
+    };
+
+    const handleExportTangentialJSON = () => {
+        downloadJSON(`${data.test_name}_tangential_results.json`, {
+            test_name: data.test_name,
+            test_id: data.test_id,
+            export_date: new Date().toISOString(),
+            phase: 'Tangential Test',
+            results: tangentialResults
+        });
+    };
+
+    const handleExportRadialCSV = () => {
+        const csv = [
+            'Angle (degrees),Distance (m),Offset from Boundary (m),Detected',
+            ...radialResults.map(r =>
+                `${r.angle},${r.distance.toFixed(2)},${r.offset_from_boundary?.toFixed(2) ?? 'N/A'},${r.detected ? 'Yes' : 'No'}`
+            )
+        ].join('\n');
+        downloadCSV(`${data.test_name}_radial_results.csv`, csv);
+    };
+
+    const handleExportRadialJSON = () => {
+        downloadJSON(`${data.test_name}_radial_results.json`, {
+            test_name: data.test_name,
+            test_id: data.test_id,
+            export_date: new Date().toISOString(),
+            phase: 'Radial Test',
+            results: radialResults
+        });
+    };
+
+    const handleExportAllCSV = () => {
+        const csv = [
+            '=== BOUNDARY DETECTION RESULTS ===',
+            'Angle (degrees),Detection Boundary (m),Detected Distance (m),No Detection Distance (m)',
+            ...boundaryResults.map(r =>
+                `${r.angle},${r.detection_boundary ?? 'N/A'},${r.detected_distance ?? 'N/A'},${r.no_detection_distance ?? 'N/A'}`
+            ),
+            '',
+            '=== TANGENTIAL TEST RESULTS ===',
+            'Angle (degrees),Distance (m),Offset from Boundary (m),Detected',
+            ...tangentialResults.map(r =>
+                `${r.angle},${r.distance.toFixed(2)},${r.offset_from_boundary?.toFixed(2) ?? 'N/A'},${r.detected ? 'Yes' : 'No'}`
+            ),
+            '',
+            '=== RADIAL TEST RESULTS ===',
+            'Angle (degrees),Distance (m),Offset from Boundary (m),Detected',
+            ...radialResults.map(r =>
+                `${r.angle},${r.distance.toFixed(2)},${r.offset_from_boundary?.toFixed(2) ?? 'N/A'},${r.detected ? 'Yes' : 'No'}`
+            )
+        ].join('\n');
+        downloadCSV(`${data.test_name}_all_results.csv`, csv);
+    };
+
+    const handleExportAllJSON = () => {
+        downloadJSON(`${data.test_name}_all_results.json`, {
+            test_name: data.test_name,
+            test_id: data.test_id,
+            export_date: new Date().toISOString(),
+            boundary_detection: {
+                completed: boundaryDetectionCompleted,
+                results: boundaryResults
+            },
+            tangential_test: {
+                completed: tangentialTestCompleted,
+                results: tangentialResults
+            },
+            radial_test: {
+                completed: radialTestCompleted,
+                results: radialResults
+            }
+        });
+    };
+
     return (
         <Layout>
             <Header
@@ -462,31 +612,68 @@ export default function TestingPattern1() {
 
                 <div style={{ flex: 1, display: "flex", justifyContent: "right" }}>
                     <Space>
-                        {!isRunning && !isPaused && !awaitingContinuation && (
-                            <Button color="primary" variant="solid" onClick={handleStart} disabled={isCompleted}>
+                        {/* Show "Start Test" only when:
+                            - No test is currently running
+                            - Not awaiting user selection (test phase continuation)
+                            - No boundary results exist (test hasn't started yet)
+                            - Test is not completed
+                        */}
+                        {!isRunning && !awaitingContinuation && boundaryResults.length === 0 && !isCompleted && (
+                            <Button color="primary" variant="solid" onClick={handleStart}>
                                 Start Test
                             </Button>
                         )}
-                        {awaitingContinuation && (
+
+                        {/* Show test selection buttons when:
+                            - Boundary detection is complete
+                            - User needs to select next test phase (tangential or radial)
+                            - At least one test phase is not completed
+                        */}
+                        {awaitingContinuation && boundaryDetectionCompleted && (
                             <Space>
-                                <Button
-                                    type="primary"
-                                    onClick={handleStartTangential}
-                                    disabled={tangentialTestCompleted}
-                                    icon={tangentialTestCompleted ? <CheckCircleOutlined /> : undefined}
-                                >
-                                    {tangentialTestCompleted ? '✓ Tangential Complete' : 'Start Tangential Test'}
-                                </Button>
-                                <Button
-                                    type="primary"
-                                    onClick={handleStartRadial}
-                                    disabled={radialTestCompleted}
-                                    icon={radialTestCompleted ? <CheckCircleOutlined /> : undefined}
-                                >
-                                    {radialTestCompleted ? '✓ Radial Complete' : 'Start Radial Test'}
-                                </Button>
+                                {/* Show tangential button only if not completed */}
+                                {!tangentialTestCompleted && (
+                                    <Button
+                                        type="primary"
+                                        onClick={handleStartTangential}
+                                    >
+                                        Start Tangential Test
+                                    </Button>
+                                )}
+                                {/* Show radial button only if not completed */}
+                                {!radialTestCompleted && (
+                                    <Button
+                                        type="primary"
+                                        onClick={handleStartRadial}
+                                    >
+                                        Start Radial Test
+                                    </Button>
+                                )}
+                                {/* Show completed status for finished tests */}
+                                {tangentialTestCompleted && (
+                                    <Button
+                                        type="default"
+                                        disabled
+                                        icon={<CheckCircleOutlined />}
+                                        style={{ color: 'green', borderColor: 'green' }}
+                                    >
+                                        ✓ Tangential Complete
+                                    </Button>
+                                )}
+                                {radialTestCompleted && (
+                                    <Button
+                                        type="default"
+                                        disabled
+                                        icon={<CheckCircleOutlined />}
+                                        style={{ color: 'green', borderColor: 'green' }}
+                                    >
+                                        ✓ Radial Complete
+                                    </Button>
+                                )}
                             </Space>
                         )}
+
+                        {/* Show pause/stop during active test execution */}
                         {isRunning && !isPaused && (
                             <>
                                 <Button color="orange" variant="solid" onClick={handlePause}>
@@ -497,6 +684,8 @@ export default function TestingPattern1() {
                                 </Button>
                             </>
                         )}
+
+                        {/* Show resume/stop when test is paused (but not awaiting continuation) */}
                         {isPaused && !awaitingContinuation && (
                             <>
                                 <Button color="primary" variant="solid" onClick={handleResume}>
@@ -516,6 +705,298 @@ export default function TestingPattern1() {
                     <Title level={2}>{data.test_name}</Title>
                     <Text>Two-phase boundary detection and tangential/radial testing</Text>
                 </div>
+
+                {/* Phase Timeline */}
+                <Card style={{ marginBottom: 16 }} title="Test Progress Timeline">
+                    <Steps
+                        current={
+                            currentPhase === 'COMPLETED' ? 3 :
+                            (radialTestCompleted || currentPhase === 'RADIAL_TEST') ? 2 :
+                            (tangentialTestCompleted || currentPhase === 'TANGENTIAL_TEST') ? 2 :
+                            (boundaryDetectionCompleted || currentPhase === 'BOUNDARY_DETECTION') ? 1 :
+                            0
+                        }
+                        status={
+                            status === 'ERROR' ? 'error' :
+                            status === 'IN_PROGRESS' ? 'process' :
+                            currentPhase === 'COMPLETED' ? 'finish' :
+                            'process'
+                        }
+                        items={[
+                            {
+                                title: 'Boundary Detection',
+                                description: boundaryDetectionCompleted ? `${boundaryResults.length}/36 angles` : 'Pending',
+                                icon: boundaryDetectionCompleted ? <CheckCircleOutlined /> : undefined,
+                                status: boundaryDetectionCompleted ? 'finish' :
+                                        currentPhase === 'BOUNDARY_DETECTION' ? 'process' : 'wait'
+                            },
+                            {
+                                title: 'Tangential Test',
+                                description: tangentialTestCompleted ? `${tangentialResults.length} measurements` :
+                                            currentPhase === 'TANGENTIAL_TEST' && tangentialResults.length > 0 ? `${tangentialResults.length} measurements` :
+                                            'Pending',
+                                icon: tangentialTestCompleted ? <CheckCircleOutlined /> :
+                                      currentPhase === 'TANGENTIAL_TEST' ? <ClockCircleOutlined /> : undefined,
+                                status: tangentialTestCompleted ? 'finish' :
+                                        currentPhase === 'TANGENTIAL_TEST' ? 'process' : 'wait'
+                            },
+                            {
+                                title: 'Radial Test',
+                                description: radialTestCompleted ? `${radialResults.length} measurements` :
+                                            currentPhase === 'RADIAL_TEST' && radialResults.length > 0 ? `${radialResults.length} measurements` :
+                                            'Pending',
+                                icon: radialTestCompleted ? <CheckCircleOutlined /> :
+                                      currentPhase === 'RADIAL_TEST' ? <ClockCircleOutlined /> : undefined,
+                                status: radialTestCompleted ? 'finish' :
+                                        currentPhase === 'RADIAL_TEST' ? 'process' : 'wait'
+                            }
+                        ]}
+                    />
+                </Card>
+
+                {/* Test Summary */}
+                <Card
+                    title="Test Summary"
+                    style={{ marginBottom: 16 }}
+                    extra={
+                        (boundaryResults.length > 0 || tangentialResults.length > 0 || radialResults.length > 0) && (
+                            <Space>
+                                <Button
+                                    size="small"
+                                    icon={<DownloadOutlined />}
+                                    onClick={handleExportAllCSV}
+                                >
+                                    Export CSV
+                                </Button>
+                                <Button
+                                    size="small"
+                                    icon={<DownloadOutlined />}
+                                    onClick={handleExportAllJSON}
+                                >
+                                    Export JSON
+                                </Button>
+                            </Space>
+                        )
+                    }
+                >
+                    <Row gutter={16}>
+                        <Col xs={24} sm={8}>
+                            <Statistic
+                                title="Boundary Detection"
+                                value={boundaryDetectionCompleted ? "Complete" : boundaryResults.length > 0 ? "In Progress" : "Pending"}
+                                prefix={boundaryDetectionCompleted ? <CheckCircleOutlined style={{ color: 'green' }} /> : null}
+                                valueStyle={{
+                                    color: boundaryDetectionCompleted ? 'green' :
+                                           boundaryResults.length > 0 ? 'blue' : 'gray',
+                                    fontSize: 16
+                                }}
+                            />
+                            {boundaryResults.length > 0 && (
+                                <Text type="secondary" style={{ fontSize: 12 }}>
+                                    {boundaryResults.filter(r => r.detection_boundary !== null).length}/{boundaryResults.length} detected
+                                </Text>
+                            )}
+                        </Col>
+                        <Col xs={24} sm={8}>
+                            <Statistic
+                                title="Tangential Test"
+                                value={tangentialTestCompleted ? "Complete" : tangentialResults.length > 0 ? "In Progress" : "Pending"}
+                                prefix={tangentialTestCompleted ? <CheckCircleOutlined style={{ color: 'green' }} /> : null}
+                                valueStyle={{
+                                    color: tangentialTestCompleted ? 'green' :
+                                           tangentialResults.length > 0 ? 'blue' : 'gray',
+                                    fontSize: 16
+                                }}
+                            />
+                            {tangentialResults.length > 0 && (
+                                <Text type="secondary" style={{ fontSize: 12 }}>
+                                    {tangentialResults.filter(r => r.detected).length}/{tangentialResults.length} detected
+                                </Text>
+                            )}
+                        </Col>
+                        <Col xs={24} sm={8}>
+                            <Statistic
+                                title="Radial Test"
+                                value={radialTestCompleted ? "Complete" : radialResults.length > 0 ? "In Progress" : "Pending"}
+                                prefix={radialTestCompleted ? <CheckCircleOutlined style={{ color: 'green' }} /> : null}
+                                valueStyle={{
+                                    color: radialTestCompleted ? 'green' :
+                                           radialResults.length > 0 ? 'blue' : 'gray',
+                                    fontSize: 16
+                                }}
+                            />
+                            {radialResults.length > 0 && (
+                                <Text type="secondary" style={{ fontSize: 12 }}>
+                                    {radialResults.filter(r => r.detected).length}/{radialResults.length} detected
+                                </Text>
+                            )}
+                        </Col>
+                    </Row>
+                </Card>
+
+                {/* Test Statistics and Insights */}
+                {(boundaryDetectionCompleted || tangentialTestCompleted || radialTestCompleted) && (
+                    <Card title="Test Statistics" style={{ marginBottom: 16 }}>
+                        <Row gutter={16}>
+                            {boundaryDetectionCompleted && (
+                                <>
+                                    <Col xs={12} sm={6}>
+                                        <Statistic
+                                            title="Boundary Detection Rate"
+                                            value={(boundaryResults.filter(r => r.detection_boundary !== null).length / boundaryResults.length * 100).toFixed(1)}
+                                            suffix="%"
+                                            valueStyle={{ fontSize: 16, color: '#1677ff' }}
+                                        />
+                                    </Col>
+                                    <Col xs={12} sm={6}>
+                                        <Statistic
+                                            title="Avg Boundary Distance"
+                                            value={
+                                                boundaryResults.filter(r => r.detection_boundary !== null).length > 0
+                                                    ? (boundaryResults
+                                                        .filter(r => r.detection_boundary !== null)
+                                                        .reduce((sum, r) => sum + (r.detection_boundary || 0), 0) /
+                                                        boundaryResults.filter(r => r.detection_boundary !== null).length).toFixed(2)
+                                                    : 'N/A'
+                                            }
+                                            suffix={boundaryResults.filter(r => r.detection_boundary !== null).length > 0 ? 'm' : ''}
+                                            valueStyle={{ fontSize: 16, color: '#1677ff' }}
+                                        />
+                                    </Col>
+                                </>
+                            )}
+                            {tangentialTestCompleted && tangentialResults.length > 0 && (
+                                <Col xs={12} sm={6}>
+                                    <Statistic
+                                        title="Tangential Detection Rate"
+                                        value={(tangentialResults.filter(r => r.detected).length / tangentialResults.length * 100).toFixed(1)}
+                                        suffix="%"
+                                        valueStyle={{ fontSize: 16, color: '#722ed1' }}
+                                    />
+                                </Col>
+                            )}
+                            {radialTestCompleted && radialResults.length > 0 && (
+                                <Col xs={12} sm={6}>
+                                    <Statistic
+                                        title="Radial Detection Rate"
+                                        value={(radialResults.filter(r => r.detected).length / radialResults.length * 100).toFixed(1)}
+                                        suffix="%"
+                                        valueStyle={{ fontSize: 16, color: '#fa8c16' }}
+                                    />
+                                </Col>
+                            )}
+                        </Row>
+                    </Card>
+                )}
+
+                {/* Visual Boundary Map */}
+                {boundaryResults.length > 0 && (
+                    <Card title="Boundary Detection Map" style={{ marginBottom: 16 }}>
+                        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
+                            <div style={{ position: 'relative', width: '400px', height: '400px' }}>
+                                {/* Background circles (distance markers) */}
+                                {[2, 4, 6, 8].map(distance => (
+                                    <div
+                                        key={distance}
+                                        style={{
+                                            position: 'absolute',
+                                            top: '50%',
+                                            left: '50%',
+                                            transform: 'translate(-50%, -50%)',
+                                            width: `${distance * 50}px`,
+                                            height: `${distance * 50}px`,
+                                            border: '1px solid #e0e0e0',
+                                            borderRadius: '50%'
+                                        }}
+                                    />
+                                ))}
+
+                                {/* Distance labels */}
+                                {[2, 4, 6, 8].map(distance => (
+                                    <div
+                                        key={`label-${distance}`}
+                                        style={{
+                                            position: 'absolute',
+                                            top: '50%',
+                                            left: `calc(50% + ${distance * 25}px)`,
+                                            transform: 'translateY(-50%)',
+                                            fontSize: '10px',
+                                            color: '#999'
+                                        }}
+                                    >
+                                        {distance}m
+                                    </div>
+                                ))}
+
+                                {/* Center point */}
+                                <div
+                                    style={{
+                                        position: 'absolute',
+                                        top: '50%',
+                                        left: '50%',
+                                        transform: 'translate(-50%, -50%)',
+                                        width: '10px',
+                                        height: '10px',
+                                        background: '#1677ff',
+                                        borderRadius: '50%',
+                                        zIndex: 10
+                                    }}
+                                />
+
+                                {/* Boundary points */}
+                                {boundaryResults.map((result, idx) => {
+                                    if (result.detection_boundary === null) return null;
+
+                                    const angleRad = (result.angle * Math.PI) / 180;
+                                    const distance = result.detection_boundary;
+                                    // Scale: 50px per meter, max 8 meters
+                                    const radius = Math.min(distance * 50, 200);
+                                    const x = radius * Math.sin(angleRad);
+                                    const y = -radius * Math.cos(angleRad); // Negative because CSS y-axis is inverted
+
+                                    return (
+                                        <div
+                                            key={idx}
+                                            style={{
+                                                position: 'absolute',
+                                                top: `calc(50% + ${y}px)`,
+                                                left: `calc(50% + ${x}px)`,
+                                                transform: 'translate(-50%, -50%)',
+                                                width: '8px',
+                                                height: '8px',
+                                                background: '#52c41a',
+                                                borderRadius: '50%',
+                                                border: '1px solid #389e0d',
+                                                zIndex: 5
+                                            }}
+                                            title={`${result.angle}°: ${result.detection_boundary.toFixed(2)}m`}
+                                        />
+                                    );
+                                })}
+
+                                {/* Angle markers (0°, 90°, 180°, 270°) */}
+                                <div style={{ position: 'absolute', top: '5px', left: '50%', transform: 'translateX(-50%)', fontSize: '12px', fontWeight: 'bold' }}>
+                                    0°
+                                </div>
+                                <div style={{ position: 'absolute', right: '5px', top: '50%', transform: 'translateY(-50%)', fontSize: '12px', fontWeight: 'bold' }}>
+                                    90°
+                                </div>
+                                <div style={{ position: 'absolute', bottom: '5px', left: '50%', transform: 'translateX(-50%)', fontSize: '12px', fontWeight: 'bold' }}>
+                                    180°
+                                </div>
+                                <div style={{ position: 'absolute', left: '5px', top: '50%', transform: 'translateY(-50%)', fontSize: '12px', fontWeight: 'bold' }}>
+                                    270°
+                                </div>
+                            </div>
+                        </div>
+                        <div style={{ textAlign: 'center', marginTop: '10px' }}>
+                            <Text type="secondary">
+                                Green dots represent detected boundaries at each angle.
+                                Hover over points to see exact measurements.
+                            </Text>
+                        </div>
+                    </Card>
+                )}
 
                 {/* Phase Progress */}
                 {phaseProgress && (
@@ -567,9 +1048,25 @@ export default function TestingPattern1() {
                         title={`Boundary Detection Results (${boundaryResults.length}/36 angles)`}
                         style={{ marginBottom: 16 }}
                         extra={
-                            <Text type="secondary">
-                                {boundaryResults.filter(r => r.detection_boundary !== null).length} detected
-                            </Text>
+                            <Space>
+                                <Text type="secondary">
+                                    {boundaryResults.filter(r => r.detection_boundary !== null).length} detected
+                                </Text>
+                                <Button
+                                    size="small"
+                                    icon={<DownloadOutlined />}
+                                    onClick={handleExportBoundaryCSV}
+                                >
+                                    CSV
+                                </Button>
+                                <Button
+                                    size="small"
+                                    icon={<DownloadOutlined />}
+                                    onClick={handleExportBoundaryJSON}
+                                >
+                                    JSON
+                                </Button>
+                            </Space>
                         }
                     >
                         <div style={{ maxHeight: '400px', overflow: 'auto' }}>
@@ -607,9 +1104,25 @@ export default function TestingPattern1() {
                         title={`Tangential Test Results (${tangentialResults.length} measurements)`}
                         style={{ marginBottom: 16 }}
                         extra={
-                            <Text type="secondary">
-                                {tangentialResults.filter(r => r.detected).length} detected
-                            </Text>
+                            <Space>
+                                <Text type="secondary">
+                                    {tangentialResults.filter(r => r.detected).length} detected
+                                </Text>
+                                <Button
+                                    size="small"
+                                    icon={<DownloadOutlined />}
+                                    onClick={handleExportTangentialCSV}
+                                >
+                                    CSV
+                                </Button>
+                                <Button
+                                    size="small"
+                                    icon={<DownloadOutlined />}
+                                    onClick={handleExportTangentialJSON}
+                                >
+                                    JSON
+                                </Button>
+                            </Space>
                         }
                     >
                         <div style={{ maxHeight: '400px', overflow: 'auto' }}>
@@ -635,7 +1148,7 @@ export default function TestingPattern1() {
                                             />
                                             {result.offset_from_boundary !== undefined && (
                                                 <Text type="secondary" style={{ fontSize: 11 }}>
-                                                    +{result.offset_from_boundary.toFixed(1)}m from boundary
+                                                    {result.offset_from_boundary.toFixed(1)}m inside boundary
                                                 </Text>
                                             )}
                                         </Card>
@@ -652,9 +1165,25 @@ export default function TestingPattern1() {
                         title={`Radial Test Results (${radialResults.length} measurements)`}
                         style={{ marginBottom: 16 }}
                         extra={
-                            <Text type="secondary">
-                                {radialResults.filter(r => r.detected).length} detected
-                            </Text>
+                            <Space>
+                                <Text type="secondary">
+                                    {radialResults.filter(r => r.detected).length} detected
+                                </Text>
+                                <Button
+                                    size="small"
+                                    icon={<DownloadOutlined />}
+                                    onClick={handleExportRadialCSV}
+                                >
+                                    CSV
+                                </Button>
+                                <Button
+                                    size="small"
+                                    icon={<DownloadOutlined />}
+                                    onClick={handleExportRadialJSON}
+                                >
+                                    JSON
+                                </Button>
+                            </Space>
                         }
                     >
                         <div style={{ maxHeight: '400px', overflow: 'auto' }}>
@@ -680,7 +1209,7 @@ export default function TestingPattern1() {
                                             />
                                             {result.offset_from_boundary !== undefined && (
                                                 <Text type="secondary" style={{ fontSize: 11 }}>
-                                                    +{result.offset_from_boundary.toFixed(1)}m from boundary
+                                                    {result.offset_from_boundary.toFixed(1)}m inside boundary
                                                 </Text>
                                             )}
                                         </Card>

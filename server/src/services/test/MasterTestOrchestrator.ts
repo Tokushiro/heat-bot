@@ -558,7 +558,9 @@ export class MasterTestOrchestrator extends EventEmitter {
                 if (this.isPaused) await this.waitForResume();
                 this.ensureNotStopped();
 
-                const testDistance = boundary.detection_boundary + offsetDistance;
+                // Subtract offset to test INSIDE the boundary (closer to sensor)
+                // E.g., if boundary is 8m and offset is 2m, test at 6m (not 10m!)
+                const testDistance = boundary.detection_boundary - offsetDistance;
 
                 const alreadyCompleted = completedMeasurements.some(
                     m => m.angle === boundary.angle && 
@@ -754,7 +756,9 @@ export class MasterTestOrchestrator extends EventEmitter {
                 if (this.isPaused) await this.waitForResume();
                 this.ensureNotStopped();
 
-                const testDistance = boundary.detection_boundary + offsetDistance;
+                // Subtract offset to test INSIDE the boundary (closer to sensor)
+                // E.g., if boundary is 8m and offset is 2m, test at 6m (not 10m!)
+                const testDistance = boundary.detection_boundary - offsetDistance;
 
                 await this.performComplianceMeasurement(
                     config.test_id,
@@ -859,7 +863,9 @@ export class MasterTestOrchestrator extends EventEmitter {
                 if (this.isPaused) await this.waitForResume();
                 this.ensureNotStopped();
 
-                const testDistance = boundary.detection_boundary + offsetDistance;
+                // Subtract offset to test INSIDE the boundary (closer to sensor)
+                // E.g., if boundary is 8m and offset is 2m, test at 6m (not 10m!)
+                const testDistance = boundary.detection_boundary - offsetDistance;
 
                 await this.performComplianceMeasurement(
                     config.test_id,

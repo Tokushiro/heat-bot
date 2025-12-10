@@ -185,7 +185,7 @@ export default function SerialTestPage() {
             <Row gutter={[16, 16]}>
                 {/* Connection settings */}
                 <Col xs={24} md={12}>
-                    <Card title="Connection" extra={statusBadge} bodyStyle={{ paddingBottom: 16 }}>
+                    <Card title="Connection" extra={statusBadge} styles={{ body: { paddingBottom: 16 } }}>
                         <Form
                             form={form}
                             layout="vertical"
@@ -230,7 +230,7 @@ export default function SerialTestPage() {
 
                 {/* Command sender */}
                 <Col xs={24} md={12}>
-                    <Card title="Send Command" bodyStyle={{ paddingBottom: 16 }}>
+                    <Card title="Send Command" styles={{ body: { paddingBottom: 16 } }}>
                         <Space.Compact style={{ width: "100%" }}>
                             <Input
                                 placeholder='Type a command (e.g., "conn" or "forward 100")'
@@ -277,7 +277,7 @@ export default function SerialTestPage() {
                         </Button>
                     </Space>
                 }
-                bodyStyle={{ paddingTop: 8 }}
+                styles={{ body: { paddingTop: 8 } }}
             >
                 <List
                     size="small"

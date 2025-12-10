@@ -1,0 +1,111 @@
+/* Boundary Comparison Plot Styles */
+
+.boundary-comparison-plot {
+    background-color: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Header */
+.plot-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.plot-header h3 {
+    margin: 0;
+    color: #333;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+/* Legend */
+.plot-legend {
+    display: flex;
+    gap: 25px;
+    flex-wrap: wrap;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: #666;
+}
+
+.legend-line {
+    width: 40px;
+    height: 0;
+    border-radius: 2px;
+}
+
+.legend-line.ideal {
+    border-top: 3px solid #ff69b4;
+}
+
+.legend-line.measured {
+    border-top: 2px solid #4caf50;
+}
+
+.legend-line.deviation {
+    border-top: 1px dashed rgba(255, 152, 0, 0.7);
+}
+
+/* Canvas */
+.boundary-canvas {
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    display: block;
+    margin: 0 auto;
+    cursor: crosshair;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .boundary-comparison-plot {
+        padding: 15px;
+    }
+
+    .plot-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .plot-header h3 {
+        font-size: 18px;
+    }
+
+    .plot-legend {
+        width: 100%;
+    }
+
+    .boundary-canvas {
+        max-width: 100%;
+        height: auto;
+    }
+}
+
+@media (max-width: 480px) {
+    .boundary-comparison-plot {
+        padding: 10px;
+    }
+
+    .plot-header h3 {
+        font-size: 16px;
+    }
+
+    .legend-item {
+        font-size: 12px;
+    }
+
+    .legend-line {
+        width: 30px;
+    }
+}
