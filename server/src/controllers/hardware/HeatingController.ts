@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { HeatingAPIFactory } from '../../api/factories/HeatingAPIFactory';
 import { HeatingZone } from '../../api/interfaces/IHeatingAPI';
+import { TelemetryService } from '../../services/telemetry/TelemetryService';
 
 /**
  * Heating Controller
@@ -64,6 +65,29 @@ export async function setTemperature(req: Request, res: Response) {
         await heating.setTargetTemperature(zone as HeatingZone, temperature);
 
         const status = heating.getZoneStatus(zone as HeatingZone);
+
+        // Telemetry hook (optional)
+        const { test_id, test_step_id, ambient_temp } = req.body;
+        if (test_id) {
+            TelemetryService.recordSample({
+                test_id,
+                test_step_id,
+                ambient_temp,
+                head_temp_avg: zone === 'HEAD' ? status?.avgTemp : undefined,
+                head_temp_min: zone === 'HEAD' ? status?.minTemp : undefined,
+                head_temp_max: zone === 'HEAD' ? status?.maxTemp : undefined,
+                head_enabled: zone === 'HEAD' ? status?.enabled : undefined,
+                body_temp_avg: zone === 'BODY' ? status?.avgTemp : undefined,
+                body_temp_min: zone === 'BODY' ? status?.minTemp : undefined,
+                body_temp_max: zone === 'BODY' ? status?.maxTemp : undefined,
+                body_enabled: zone === 'BODY' ? status?.enabled : undefined,
+                legs_temp_avg: zone === 'LEGS' ? status?.avgTemp : undefined,
+                legs_temp_min: zone === 'LEGS' ? status?.minTemp : undefined,
+                legs_temp_max: zone === 'LEGS' ? status?.maxTemp : undefined,
+                legs_enabled: zone === 'LEGS' ? status?.enabled : undefined,
+                timestamp: new Date()
+            }).catch(err => console.warn('[HeatingController] Failed to record telemetry:', err));
+        }
 
         return res.status(200).json({
             message: `${zone} temperature set to ${temperature}°C`,

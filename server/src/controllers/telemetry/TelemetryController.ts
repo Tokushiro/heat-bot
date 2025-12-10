@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { TelemetryService } from '../../services/telemetry/TelemetryService';
+import { telemetryEventBus } from '../../services/telemetry/TelemetryEventBus';
 
 /**
  * Telemetry Controller
@@ -279,4 +280,38 @@ export async function deleteSamples(req: Request, res: Response) {
             details: error instanceof Error ? error.message : 'Unknown error'
         });
     }
+}
+
+/**
+ * Server-Sent Events stream for real-time telemetry updates.
+ * Optional query param: testId (number) to filter events by test.
+ */
+export function streamTelemetry(req: Request, res: Response) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const testIdFilter = req.query.testId ? Number(req.query.testId) : undefined;
+
+    const send = (event: string, data: unknown) => {
+        res.write(`event: ${event}\n`);
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    // Initial handshake
+    send('connected', { ok: true, ts: new Date().toISOString(), testIdFilter });
+
+    const onTelemetry = (payload: any) => {
+        if (testIdFilter && payload?.test_id !== testIdFilter) {
+            return;
+        }
+        send('telemetry', payload);
+    };
+
+    telemetryEventBus.on('telemetry', onTelemetry);
+
+    req.on('close', () => {
+        telemetryEventBus.off('telemetry', onTelemetry);
+        res.end();
+    });
 }

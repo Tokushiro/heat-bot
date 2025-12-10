@@ -35,4 +35,7 @@ router.get('/step/:testStepId', telemetryController.getSamplesForStep);
 // Delete telemetry samples
 router.delete('/test/:testId', telemetryController.deleteSamples);
 
+// Real-time telemetry stream (SSE)
+router.get('/stream', telemetryController.streamTelemetry);
+
 export default router;

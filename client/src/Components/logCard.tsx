@@ -1,29 +1,29 @@
-import {Card,Flex,Typography,Tag} from "antd"
+import { Card, Flex, Typography, Tag } from "antd";
 
 const { Text } = Typography;
 
-
-export function LogCard({tag,information,tagColour}: {
+type LogCardProps = {
     tag: string;
     information: string;
-    tagColour: string
-})
-{
+    tagColour: string;
+    timestamp?: string;
+};
 
-    const currentDate = new Date();
-    const currentHours = currentDate.getHours();
-    const currentMinnute = currentDate.getMinutes();
-    const currentSecconds = currentDate.getSeconds();
+export function LogCard({ tag, information, tagColour, timestamp }: LogCardProps) {
+    const ts = timestamp
+        ? new Date(timestamp)
+        : new Date();
 
-    const currentTIme = `${currentHours}:${currentMinnute}:${currentSecconds}`
+    const formatted = ts.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
 
-    return(
-        <Card hoverable={true}
-        style={{
-            backgroundColor: "rgb(250, 250, 250)"
-        }}>
+    return (
+        <Card
+            hoverable={true}
+            style={{
+                backgroundColor: "rgb(250, 250, 250)"
+            }}>
             <Flex gap="middle">
-                <Text>{currentTIme}</Text>
+                <Text>{formatted}</Text>
                 <Tag
                     color={tagColour}
                     style={{
@@ -35,6 +35,5 @@ export function LogCard({tag,information,tagColour}: {
             </Flex>
             <Text>{information}</Text>
         </Card>
-
-    )
+    );
 }

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { EnvironmentAPIFactory } from '../../api/factories/EnvironmentAPIFactory';
+import { TelemetryService } from '../../services/telemetry/TelemetryService';
 
 /**
  * Environment Controller
@@ -42,6 +43,16 @@ export async function getTemperature(req: Request, res: Response) {
     try {
         const environment = EnvironmentAPIFactory.getEnvironmentAPI();
         const temperature = environment.getTemperature();
+        const { test_id, test_step_id } = req.query;
+
+        if (test_id) {
+            TelemetryService.recordSample({
+                test_id: Number(test_id),
+                test_step_id: test_step_id ? Number(test_step_id) : undefined,
+                ambient_temp: temperature,
+                timestamp: new Date()
+            }).catch(err => console.warn('[EnvironmentController] Failed to record temperature telemetry:', err));
+        }
 
         return res.status(200).json({
             temperature,
@@ -65,6 +76,16 @@ export async function getHumidity(req: Request, res: Response) {
     try {
         const environment = EnvironmentAPIFactory.getEnvironmentAPI();
         const humidity = environment.getHumidity();
+        const { test_id, test_step_id } = req.query;
+
+        if (test_id) {
+            TelemetryService.recordSample({
+                test_id: Number(test_id),
+                test_step_id: test_step_id ? Number(test_step_id) : undefined,
+                humidity,
+                timestamp: new Date()
+            }).catch(err => console.warn('[EnvironmentController] Failed to record humidity telemetry:', err));
+        }
 
         return res.status(200).json({
             humidity,

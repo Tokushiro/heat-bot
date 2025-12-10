@@ -162,6 +162,21 @@ function downloadJSON(filename: string, data: any) {
     document.body.removeChild(link);
 }
 
+type TelemetrySample = {
+    telemetry_id?: number;
+    test_id?: number;
+    ambient_temp?: number;
+    humidity?: number;
+    head_temp_avg?: number;
+    body_temp_avg?: number;
+    legs_temp_avg?: number;
+    detector_angle?: number;
+    robot_position_x?: number;
+    robot_position_y?: number;
+    detection_active?: boolean;
+    timestamp?: string;
+};
+
 export default function TestingPattern1() {
     const navigate = useNavigate();
     const { state: locationState } = useLocation();
@@ -193,6 +208,7 @@ export default function TestingPattern1() {
     } = useMasterTest();
 
     const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+    const [latestTelemetry, setLatestTelemetry] = useState<TelemetrySample | null>(null);
 
     // Derived state (safe to use data here because hooks are already called)
     const liveStatus = status || data?.status || 'PLANNED';
@@ -214,6 +230,82 @@ export default function TestingPattern1() {
         console.log("Button should be enabled:", !isCompleted);
         console.log("=".repeat(60));
     }, [isRunning, isPaused, isCompleted, awaitingContinuation, connected, liveStatus, data]);
+
+    // Subscribe to telemetry SSE for this test
+    useEffect(() => {
+        if (!data?.test_id) return;
+
+        const es = new EventSource(`/api/telemetry/stream?testId=${data.test_id}`);
+
+        es.addEventListener("telemetry", (event) => {
+            try {
+                const payload = JSON.parse((event as MessageEvent).data);
+                setLatestTelemetry(payload);
+            } catch (err) {
+                console.error("[TestingPattern1] Failed to parse telemetry event:", err);
+            }
+        });
+
+        es.onerror = (err) => {
+            console.error("[TestingPattern1] Telemetry SSE error:", err);
+        };
+
+        return () => {
+            es.close();
+        };
+    }, [data?.test_id]);
+
+    // Fallback polling to hydrate telemetry if SSE is silent (e.g., historical view)
+    useEffect(() => {
+        if (!data?.test_id) return;
+        let cancelled = false;
+
+        const fetchLatest = async () => {
+            try {
+                const [teleRes, posRes, envRes, standRes, heatRes] = await Promise.all([
+                    api.get(`/api/telemetry/test/${data.test_id}/latest`).catch(() => null),
+                    api.get("/api/robot/position").catch(() => null),
+                    api.get("/api/environment/reading").catch(() => null),
+                    api.get("/api/stand/status").catch(() => null),
+                    api.get("/api/heating/status").catch(() => null),
+                ]);
+
+                const tele = teleRes?.data || {};
+                const pos = posRes?.data?.position || {};
+                const env = envRes?.data || {};
+                const stand = standRes?.data || {};
+                const zones = Array.isArray(heatRes?.data?.zones) ? heatRes?.data?.zones : [];
+                const head = zones.find((z: any) => z.zone === "HEAD");
+                const body = zones.find((z: any) => z.zone === "BODY");
+                const legs = zones.find((z: any) => z.zone === "LEGS");
+
+                if (!cancelled) {
+                    setLatestTelemetry(prev => ({
+                        ...prev,
+                        ...tele,
+                        ambient_temp: tele.ambient_temp ?? env.temperature ?? prev?.ambient_temp ?? "N/A",
+                        humidity: tele.humidity ?? env.humidity ?? prev?.humidity ?? "N/A",
+                        robot_position_x: tele.robot_position_x ?? pos.x ?? prev?.robot_position_x,
+                        robot_position_y: tele.robot_position_y ?? pos.y ?? prev?.robot_position_y,
+                        detector_angle: tele.detector_angle ?? stand.currentAngle ?? prev?.detector_angle ?? "N/A",
+                        head_temp_avg: tele.head_temp_avg ?? head?.currentTemp ?? prev?.head_temp_avg ?? "N/A",
+                        body_temp_avg: tele.body_temp_avg ?? body?.currentTemp ?? prev?.body_temp_avg ?? "N/A",
+                        legs_temp_avg: tele.legs_temp_avg ?? legs?.currentTemp ?? prev?.legs_temp_avg ?? "N/A",
+                        timestamp: tele.timestamp ?? new Date().toISOString(),
+                    }));
+                }
+            } catch (err) {
+                // ignore 404 when no telemetry yet
+            }
+        };
+
+        fetchLatest();
+        const interval = setInterval(fetchLatest, 2000);
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+        };
+    }, [data?.test_id]);
 
     // Handle loading test state on mount
     useEffect(() => {
@@ -446,7 +538,7 @@ export default function TestingPattern1() {
     const handleStartTangential = async () => {
         console.log("➡️ Start Tangential Test clicked");
         try {
-            await startTestPhase('TANGENTIAL');
+            await startTestPhase('TANGENTIAL', data?.test_id);
             console.log("✅ Starting tangential test");
         } catch (error) {
             console.error("❌ Failed to start tangential test:", error);
@@ -456,7 +548,7 @@ export default function TestingPattern1() {
     const handleStartRadial = async () => {
         console.log("➡️ Start Radial Test clicked");
         try {
-            await startTestPhase('RADIAL');
+            await startTestPhase('RADIAL', data?.test_id);
             console.log("✅ Starting radial test");
         } catch (error) {
             console.error("❌ Failed to start radial test:", error);
@@ -611,44 +703,30 @@ export default function TestingPattern1() {
 
                 <div style={{ flex: 1, display: "flex", justifyContent: "right" }}>
                     <Space>
-                        {/* Show "Start Test" only when:
-                            - No test is currently running
-                            - Not awaiting user selection (test phase continuation)
-                            - Test hasn't started yet OR was stopped (allow restart)
-                            - Test is not completed
-                        */}
-                        {!isRunning && !isPaused && !awaitingContinuation && !isCompleted && (
+                        {/* Start button only before boundary is done */}
+                        {!isRunning && !isPaused && !isCompleted && !boundaryDetectionCompleted && (
                             <Button color="primary" variant="solid" onClick={handleStart}>
                                 {boundaryResults.length > 0 ? 'Restart Test' : 'Start Test'}
                             </Button>
                         )}
 
-                        {/* Show test selection buttons when:
-                            - Boundary detection is complete
-                            - User needs to select next test phase (tangential or radial)
-                            - At least one test phase is not completed
-                        */}
-                        {awaitingContinuation && boundaryDetectionCompleted && (
+                        {/* Phase selection buttons once boundary is done (works from history too) */}
+                        {!isRunning && !isPaused && boundaryDetectionCompleted && !isCompleted && (
                             <Space>
-                                {/* Show tangential button only if not completed */}
-                                {!tangentialTestCompleted && (
-                                    <Button
-                                        type="primary"
-                                        onClick={handleStartTangential}
-                                    >
-                                        Start Tangential Test
-                                    </Button>
-                                )}
-                                {/* Show radial button only if not completed */}
-                                {!radialTestCompleted && (
-                                    <Button
-                                        type="primary"
-                                        onClick={handleStartRadial}
-                                    >
-                                        Start Radial Test
-                                    </Button>
-                                )}
-                                {/* Show completed status for finished tests */}
+                                <Button
+                                    type="primary"
+                                    onClick={handleStartTangential}
+                                    disabled={tangentialTestCompleted}
+                                >
+                                    {tangentialTestCompleted ? 'Tangential Complete' : 'Start Tangential Test'}
+                                </Button>
+                                <Button
+                                    type="primary"
+                                    onClick={handleStartRadial}
+                                    disabled={radialTestCompleted}
+                                >
+                                    {radialTestCompleted ? 'Radial Complete' : 'Start Radial Test'}
+                                </Button>
                                 {tangentialTestCompleted && (
                                     <Button
                                         type="default"
@@ -997,6 +1075,70 @@ export default function TestingPattern1() {
                     </Card>
                 )}
 
+                {/* Live Telemetry Snapshot */}
+                <Card title="Live Telemetry" style={{ marginBottom: 16 }}>
+                    <Row gutter={16}>
+                        <Col xs={24} sm={12} md={6}>
+                            <Statistic
+                                title="Ambient Temp"
+                                value={latestTelemetry?.ambient_temp ?? 'N/A'}
+                                suffix={latestTelemetry?.ambient_temp !== undefined ? '°C' : ''}
+                            />
+                            <Statistic
+                                title="Humidity"
+                                value={latestTelemetry?.humidity ?? 'N/A'}
+                                suffix={latestTelemetry?.humidity !== undefined ? '%' : ''}
+                            />
+                        </Col>
+                        <Col xs={24} sm={12} md={6}>
+                            <Statistic
+                                title="Head Temp"
+                                value={latestTelemetry?.head_temp_avg ?? 'N/A'}
+                                suffix={latestTelemetry?.head_temp_avg !== undefined ? '°C' : ''}
+                            />
+                            <Statistic
+                                title="Body Temp"
+                                value={latestTelemetry?.body_temp_avg ?? 'N/A'}
+                                suffix={latestTelemetry?.body_temp_avg !== undefined ? '°C' : ''}
+                            />
+                            <Statistic
+                                title="Legs Temp"
+                                value={latestTelemetry?.legs_temp_avg ?? 'N/A'}
+                                suffix={latestTelemetry?.legs_temp_avg !== undefined ? '°C' : ''}
+                            />
+                        </Col>
+                        <Col xs={24} sm={12} md={6}>
+                            <Statistic
+                                title="Detector Angle"
+                                value={latestTelemetry?.detector_angle ?? 'N/A'}
+                                suffix={latestTelemetry?.detector_angle !== undefined ? '°' : ''}
+                            />
+                            <Statistic
+                                title="Detection"
+                                value={latestTelemetry?.detection_active ? 'Active' : 'Idle'}
+                                valueStyle={{ color: latestTelemetry?.detection_active ? '#52c41a' : undefined }}
+                            />
+                        </Col>
+                        <Col xs={24} sm={12} md={6}>
+                            <Statistic
+                                title="Robot X"
+                                value={latestTelemetry?.robot_position_x ?? 'N/A'}
+                                suffix={latestTelemetry?.robot_position_x !== undefined ? 'm' : ''}
+                            />
+                            <Statistic
+                                title="Robot Y"
+                                value={latestTelemetry?.robot_position_y ?? 'N/A'}
+                                suffix={latestTelemetry?.robot_position_y !== undefined ? 'm' : ''}
+                            />
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                                {latestTelemetry?.timestamp
+                                    ? `Updated ${new Date(latestTelemetry.timestamp).toLocaleTimeString()}`
+                                    : 'Waiting for telemetry...'}
+                            </Text>
+                        </Col>
+                    </Row>
+                </Card>
+
                 {/* Phase Progress */}
                 {phaseProgress && (
                     <Card style={{ marginBottom: 16 }}>
@@ -1286,3 +1428,4 @@ export default function TestingPattern1() {
         </Layout>
     );
 }
+

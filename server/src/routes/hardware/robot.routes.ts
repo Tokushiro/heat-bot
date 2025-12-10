@@ -4,7 +4,10 @@ import {
     getCurrentPosition,
     stopMovement,
     homeRobot,
-    isMoving
+    isMoving,
+    robotEventStream,
+    startManualControl,
+    stopManualControl
 } from '../../controllers/hardware/RobotController';
 
 const router = Router();
@@ -15,6 +18,18 @@ const router = Router();
  * @body    { direction: 'up'|'down'|'left'|'right', action: 'start'|'stop' }
  */
 router.post('/move', handleMoveCommand);
+
+/**
+ * @route   POST /api/robot/manual/start
+ * @desc    Mark manual control as armed (emits SSE log)
+ */
+router.post('/manual/start', startManualControl);
+
+/**
+ * @route   POST /api/robot/manual/stop
+ * @desc    Mark manual control as disarmed and stop motion
+ */
+router.post('/manual/stop', stopManualControl);
 
 /**
  * @route   GET /api/robot/position
@@ -39,5 +54,11 @@ router.post('/home', homeRobot);
  * @desc    Check if robot is currently moving
  */
 router.get('/is-moving', isMoving);
+
+/**
+ * @route   GET /api/robot/stream
+ * @desc    SSE stream of robot and manual-control events
+ */
+router.get('/stream', robotEventStream);
 
 export default router;

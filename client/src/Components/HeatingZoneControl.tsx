@@ -1,4 +1,4 @@
-import { Card, Button, Space, Typography, Statistic, Row, Col, message, Switch, Progress } from 'antd';
+import { Card, Button, Space, Typography, Statistic, Row, Col, message, Switch, Progress, InputNumber } from 'antd';
 import { FireOutlined, PoweroffOutlined } from '@ant-design/icons';
 import { useState, useEffect } from 'react';
 import { api } from './apiAxios';
@@ -60,6 +60,7 @@ const ZONE_ICONS = {
 export const HeatingZoneControl = () => {
     const [systemStatus, setSystemStatus] = useState<HeatingSystemStatus | null>(null);
     const [loading, setLoading] = useState(false);
+    const [activeTestId, setActiveTestId] = useState<number | undefined>(undefined);
 
     // Fetch system status
     const fetchStatus = async () => {
@@ -90,7 +91,7 @@ export const HeatingZoneControl = () => {
         setLoading(true);
         try {
             const endpoint = currentlyEnabled ? '/api/heating/disable' : '/api/heating/enable';
-            await api.post(endpoint, { zone });
+            await api.post(endpoint, { zone, test_id: activeTestId });
             message.success(`${zone} heating ${currentlyEnabled ? 'disabled' : 'enabled'}`);
             fetchStatus();
         } catch (error: any) {
@@ -105,7 +106,7 @@ export const HeatingZoneControl = () => {
         setLoading(true);
         try {
             const endpoint = enable ? '/api/heating/enable-all' : '/api/heating/disable-all';
-            const response = await api.post(endpoint);
+            const response = await api.post(endpoint, { test_id: activeTestId });
             message.success(`All zones ${enable ? 'enabled' : 'disabled'}`);
             setSystemStatus(response.data.status);
         } catch (error: any) {
@@ -119,7 +120,7 @@ export const HeatingZoneControl = () => {
     const handleSetOffset = async (zone: string, offset: number) => {
         setLoading(true);
         try {
-            await api.post('/api/heating/set-offset', { zone, offset });
+            await api.post('/api/heating/set-offset', { zone, offset, test_id: activeTestId });
             message.success(`${zone} offset set to +${offset}°C`);
             fetchStatus();
         } catch (error: any) {
@@ -168,7 +169,19 @@ export const HeatingZoneControl = () => {
             {/* System Status */}
             <Card size="small" style={{ marginBottom: 16, background: '#f0f2f5' }}>
                 <Row gutter={16}>
-                    <Col span={6}>
+                    <Col span={8}>
+                        <Space direction="vertical" size={4}>
+                            <Text type="secondary">Active Test ID (optional)</Text>
+                            <InputNumber
+                                min={1}
+                                style={{ width: '100%' }}
+                                value={activeTestId}
+                                onChange={(v) => setActiveTestId(typeof v === 'number' ? v : undefined)}
+                                placeholder="Enter test id"
+                            />
+                        </Space>
+                    </Col>
+                    <Col span={5}>
                         <Statistic
                             title="System Status"
                             value={isConnected ? (isInitialized ? 'Ready' : 'Not Initialized') : 'Disconnected'}
@@ -178,7 +191,7 @@ export const HeatingZoneControl = () => {
                             }}
                         />
                     </Col>
-                    <Col span={6}>
+                    <Col span={4}>
                         <Statistic
                             title="Ambient Temperature"
                             value={ambientTemp.toFixed(1)}
@@ -186,7 +199,7 @@ export const HeatingZoneControl = () => {
                             valueStyle={{ fontSize: 16 }}
                         />
                     </Col>
-                    <Col span={6}>
+                    <Col span={3}>
                         <Statistic
                             title="Active Zones"
                             value={zones.filter(z => z.enabled).length}
@@ -194,7 +207,7 @@ export const HeatingZoneControl = () => {
                             valueStyle={{ fontSize: 16 }}
                         />
                     </Col>
-                    <Col span={6}>
+                    <Col span={4}>
                         {!isInitialized ? (
                             <Button
                                 type="primary"

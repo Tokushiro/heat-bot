@@ -136,7 +136,17 @@ export class TelemetryService {
         ];
 
         const result = await pool.query(query, values);
-        return result.rows[0].telemetry_id;
+        const telemetryId = result.rows[0].telemetry_id;
+
+        // Broadcast to real-time subscribers
+        try {
+            const { emitTelemetry } = await import('./TelemetryEventBus');
+            emitTelemetry({ ...sample, telemetry_id: telemetryId });
+        } catch (err) {
+            console.error('[TelemetryService] Failed to emit telemetry event:', err);
+        }
+
+        return telemetryId;
     }
 
     /**

@@ -112,7 +112,7 @@ export async function startMasterTest(req: Request, res: Response) {
  */
 export async function startTestPhase(req: Request, res: Response) {
     try {
-        const { test_type } = req.body;
+        const { test_type, test_id } = req.body;
 
         if (!test_type || (test_type !== 'TANGENTIAL' && test_type !== 'RADIAL')) {
             return res.status(400).json({
@@ -120,7 +120,45 @@ export async function startTestPhase(req: Request, res: Response) {
             });
         }
 
+        if (!test_id) {
+            return res.status(400).json({ error: "test_id is required to start a phase" });
+        }
+
         const orchestrator = MasterTestOrchestrator.instance;
+
+        // Ensure orchestrator has the right test loaded; if not, restore from DB
+        const state = orchestrator.getTestState();
+        if (!state || state.test_id !== test_id) {
+            console.log(`[MasterTest Controller] No in-memory state for test ${test_id}, restoring from database...`);
+            const dbState = await testStateService.getTestState(test_id);
+            if (!dbState) {
+                return res.status(404).json({ error: "No saved state found for this test. Start boundary detection first." });
+            }
+
+            const testService = await import("../../services/test/TestService");
+            const test = await testService.getTestById(test_id);
+            if (!test) {
+                return res.status(404).json({ error: "Test not found" });
+            }
+
+            const testConfig = {
+                test_id,
+                sensor_id: test.sensor_id,
+                test_type: 'FULL' as const,
+                boundary_angles: Array.from({ length: 36 }, (_, i) => i * 10),
+                boundary_start_distance: 8.0,
+                boundary_end_distance: 1.0,
+                boundary_step: 0.5,
+                compliance_test_distances: [2.0, 3.0],
+                compliance_tangential_sweep: true,
+                compliance_tangential_step: 15,
+                movement_speed: 50,
+                detection_wait_time: 2000,
+                repeat_measurements: 2
+            };
+
+            await orchestrator.restoreFromDatabase(test_id, dbState, testConfig);
+        }
 
         // Start the requested test phase
         orchestrator.startNextPhase(test_type).catch((error) => {

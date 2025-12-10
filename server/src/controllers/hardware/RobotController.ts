@@ -1,5 +1,8 @@
 import { Request, Response } from 'express';
 import { RobotAPIFactory } from '../../api/factories/RobotAPIFactory';
+import { TelemetryService } from '../../services/telemetry/TelemetryService';
+import { emitTelemetry } from '../../services/telemetry/TelemetryEventBus';
+import { emitRobotEvent, robotEventBus } from '../../services/telemetry/RobotEventBus';
 
 const robotAPI = RobotAPIFactory.getInstance();
 
@@ -9,7 +12,8 @@ const robotAPI = RobotAPIFactory.getInstance();
  */
 export async function handleMoveCommand(req: Request, res: Response) {
     try {
-        const { direction, action } = req.body;
+        const { direction, action, test_id, test_step_id } = req.body;
+        const commandTimestamp = new Date().toISOString();
 
         if (!direction || !action) {
             return res.status(400).json({
@@ -17,6 +21,8 @@ export async function handleMoveCommand(req: Request, res: Response) {
                 error: 'Missing required fields: direction, action'
             });
         }
+
+        emitRobotEvent("manual_move_command", { direction, action, timestamp: commandTimestamp });
 
         // For manual control, we'll use simple step movements
         // Each direction maps to a small Cartesian movement
@@ -53,6 +59,46 @@ export async function handleMoveCommand(req: Request, res: Response) {
             // Move to target position
             const result = await robotAPI.moveTo(targetX, targetY);
 
+            // Log telemetry snapshot if test context provided
+            if (test_id && result.position) {
+                TelemetryService.recordSample({
+                    test_id,
+                    test_step_id,
+                    robot_position_x: result.position.x,
+                    robot_position_y: result.position.y,
+                    timestamp: new Date()
+                }).catch(err => {
+                    console.warn("[RobotController] Failed to record telemetry:", err);
+                });
+            }
+
+            // Broadcast manual telemetry for UI (test_id 0 marks manual)
+            if (result.position) {
+                const resultTimestamp = new Date().toISOString();
+                emitTelemetry({
+                    test_id: 0,
+                    robot_position_x: result.position.x,
+                    robot_position_y: result.position.y,
+                    timestamp: resultTimestamp
+                });
+                emitRobotEvent("manual_move_result", {
+                    direction,
+                    action: 'start',
+                    success: result.success,
+                    position: result.position,
+                    duration: result.duration,
+                    timestamp: resultTimestamp
+                });
+            } else {
+                emitRobotEvent("manual_move_result", {
+                    direction,
+                    action: 'start',
+                    success: result.success,
+                    duration: result.duration,
+                    timestamp: new Date().toISOString()
+                });
+            }
+
             return res.status(200).json({
                 success: result.success,
                 direction,
@@ -66,6 +112,43 @@ export async function handleMoveCommand(req: Request, res: Response) {
             await robotAPI.stopMovement();
 
             const currentPos = await robotAPI.getCurrentPosition();
+
+            // Log telemetry snapshot if test context provided
+            if (test_id && currentPos) {
+                TelemetryService.recordSample({
+                    test_id,
+                    test_step_id,
+                    robot_position_x: currentPos.x,
+                    robot_position_y: currentPos.y,
+                    timestamp: new Date()
+                }).catch(err => {
+                    console.warn("[RobotController] Failed to record telemetry:", err);
+                });
+            }
+
+            if (currentPos) {
+                const stopTimestamp = new Date().toISOString();
+                emitTelemetry({
+                    test_id: 0,
+                    robot_position_x: currentPos.x,
+                    robot_position_y: currentPos.y,
+                    timestamp: stopTimestamp
+                });
+                emitRobotEvent("manual_move_result", {
+                    direction,
+                    action: 'stop',
+                    success: true,
+                    position: currentPos,
+                    timestamp: stopTimestamp
+                });
+            } else {
+                emitRobotEvent("manual_move_result", {
+                    direction,
+                    action: 'stop',
+                    success: true,
+                    timestamp: new Date().toISOString()
+                });
+            }
 
             return res.status(200).json({
                 success: true,
@@ -83,11 +166,41 @@ export async function handleMoveCommand(req: Request, res: Response) {
 
     } catch (error) {
         console.error('[RobotController] Move command error:', error);
+        emitRobotEvent("robot_error", {
+            error: error instanceof Error ? error.message : "Unknown error",
+            context: "manual_move_command",
+            timestamp: new Date().toISOString()
+        });
         return res.status(500).json({
             success: false,
             error: error instanceof Error ? error.message : 'Unknown error'
         });
     }
+}
+
+/**
+ * Mark manual control session as started (used for logging/SSE)
+ */
+export async function startManualControl(_req: Request, res: Response) {
+    const timestamp = new Date().toISOString();
+    emitRobotEvent("manual_control_started", { timestamp });
+    return res.status(200).json({ success: true, message: "Manual control armed" });
+}
+
+/**
+ * Mark manual control session as stopped and halt movement
+ */
+export async function stopManualControl(_req: Request, res: Response) {
+    const timestamp = new Date().toISOString();
+
+    try {
+        await robotAPI.stopMovement();
+    } catch (error) {
+        console.warn("[RobotController] Failed to stop robot during manual stop:", error);
+    }
+
+    emitRobotEvent("manual_control_stopped", { timestamp });
+    return res.status(200).json({ success: true, message: "Manual control disarmed" });
 }
 
 /**
@@ -177,4 +290,32 @@ export function isMoving(req: Request, res: Response) {
             error: error instanceof Error ? error.message : 'Unknown error'
         });
     }
+}
+
+/**
+ * SSE stream of robot events (manual control, movement notifications, errors)
+ */
+export function robotEventStream(req: Request, res: Response) {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    const send = (event: string, data: unknown) => {
+        res.write(`event: ${event}\n`);
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    send("connected", { timestamp: new Date().toISOString() });
+
+    const onEvent = (payload: any) => {
+        const eventType = payload?.type || "robot_event";
+        send(eventType, payload);
+    };
+
+    robotEventBus.on("event", onEvent);
+
+    req.on("close", () => {
+        robotEventBus.off("event", onEvent);
+        res.end();
+    });
 }

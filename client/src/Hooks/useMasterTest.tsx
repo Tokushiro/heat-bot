@@ -109,6 +109,8 @@ export function useMasterTest() {
             setIsPaused(false);
             setCurrentPhase(data.phase);
             setStatus('IN_PROGRESS');
+            setTangentialResults([]);
+            setRadialResults([]);
             addEvent("test_started", data);
             message.success(`Test ${data.test_id} started - Phase: ${data.phase}`);
         });
@@ -159,7 +161,6 @@ export function useMasterTest() {
             setAwaitingContinuation(false);
             setIsPaused(false);
             setStatus('IN_PROGRESS');
-            setTangentialResults([]); // Clear previous results
             addEvent("tangential_test_started", data);
             message.success("Starting tangential test phase");
         });
@@ -370,9 +371,9 @@ export function useMasterTest() {
     /**
      * Start a specific test phase (tangential or radial)
      */
-    const startTestPhase = useCallback(async (testType: 'TANGENTIAL' | 'RADIAL') => {
+    const startTestPhase = useCallback(async (testType: 'TANGENTIAL' | 'RADIAL', testId?: number) => {
         try {
-            await api.post("/api/master-test/start-phase", { test_type: testType });
+            await api.post("/api/master-test/start-phase", { test_type: testType, test_id: testId });
             setAwaitingContinuation(false);
             message.success(`Starting ${testType.toLowerCase()} test`);
         } catch (err: unknown) {
@@ -390,7 +391,7 @@ export function useMasterTest() {
 
         if (tangentialPending && radialPending) {
             // Both tests pending - ask user which to start first
-            Modal.confirm({
+            const modal = Modal.confirm({
                 title: "Boundary Detection Complete",
                 content: (
                     <div>
@@ -405,18 +406,28 @@ export function useMasterTest() {
                 ),
                 okText: "Start Tangential Test",
                 cancelText: "Start Radial Test",
+                closable: true,
+                maskClosable: true,
                 onOk: async () => {
-                    modalShownRef.current = false; // Reset flag when user makes choice
-                    await startTestPhase('TANGENTIAL');
+                    try {
+                        await startTestPhase('TANGENTIAL', testId);
+                    } catch (err) {
+                        const axiosError = err as { response?: { data?: { error?: string } } };
+                        message.error(axiosError?.response?.data?.error || "Failed to start tangential test");
+                        throw err;
+                    } finally {
+                        modal.destroy();
+                        modalShownRef.current = false; // Reset flag when user makes choice
+                    }
                 },
-                onCancel: async () => {
+                onCancel: () => {
+                    modal.destroy();
                     modalShownRef.current = false; // Reset flag when user makes choice
-                    await startTestPhase('RADIAL');
                 }
             });
         } else if (tangentialPending) {
             // Only tangential pending
-            Modal.confirm({
+            const modal = Modal.confirm({
                 title: "Radial Test Complete",
                 content: (
                     <div>
@@ -426,11 +437,22 @@ export function useMasterTest() {
                 ),
                 okText: "Start Tangential Test",
                 cancelText: "Stop Here",
+                closable: true,
+                maskClosable: true,
                 onOk: async () => {
-                    modalShownRef.current = false; // Reset flag when user makes choice
-                    await startTestPhase('TANGENTIAL');
+                    try {
+                        await startTestPhase('TANGENTIAL', testId);
+                    } catch (err) {
+                        const axiosError = err as { response?: { data?: { error?: string } } };
+                        message.error(axiosError?.response?.data?.error || "Failed to start tangential test");
+                        throw err;
+                    } finally {
+                        modal.destroy();
+                        modalShownRef.current = false; // Reset flag when user makes choice
+                    }
                 },
                 onCancel: () => {
+                    modal.destroy();
                     modalShownRef.current = false; // Reset flag when user dismisses
                     message.info("Test stopped after radial phase");
                     setAwaitingContinuation(false);
@@ -438,7 +460,7 @@ export function useMasterTest() {
             });
         } else if (radialPending) {
             // Only radial pending
-            Modal.confirm({
+            const modal = Modal.confirm({
                 title: "Tangential Test Complete",
                 content: (
                     <div>
@@ -448,11 +470,22 @@ export function useMasterTest() {
                 ),
                 okText: "Start Radial Test",
                 cancelText: "Stop Here",
+                closable: true,
+                maskClosable: true,
                 onOk: async () => {
-                    modalShownRef.current = false; // Reset flag when user makes choice
-                    await startTestPhase('RADIAL');
+                    try {
+                        await startTestPhase('RADIAL', testId);
+                    } catch (err) {
+                        const axiosError = err as { response?: { data?: { error?: string } } };
+                        message.error(axiosError?.response?.data?.error || "Failed to start radial test");
+                        throw err;
+                    } finally {
+                        modal.destroy();
+                        modalShownRef.current = false; // Reset flag when user makes choice
+                    }
                 },
                 onCancel: () => {
+                    modal.destroy();
                     modalShownRef.current = false; // Reset flag when user dismisses
                     message.info("Test stopped after tangential phase");
                     setAwaitingContinuation(false);
