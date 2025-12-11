@@ -410,7 +410,7 @@ export function useMasterTest() {
                 maskClosable: true,
                 onOk: async () => {
                     try {
-                        await startTestPhase('TANGENTIAL', testId);
+                        await startTestPhase('TANGENTIAL', testState?.test_id);
                     } catch (err) {
                         const axiosError = err as { response?: { data?: { error?: string } } };
                         message.error(axiosError?.response?.data?.error || "Failed to start tangential test");
@@ -441,7 +441,7 @@ export function useMasterTest() {
                 maskClosable: true,
                 onOk: async () => {
                     try {
-                        await startTestPhase('TANGENTIAL', testId);
+                        await startTestPhase('TANGENTIAL', testState?.test_id);
                     } catch (err) {
                         const axiosError = err as { response?: { data?: { error?: string } } };
                         message.error(axiosError?.response?.data?.error || "Failed to start tangential test");
@@ -474,7 +474,7 @@ export function useMasterTest() {
                 maskClosable: true,
                 onOk: async () => {
                     try {
-                        await startTestPhase('RADIAL', testId);
+                        await startTestPhase('RADIAL', testState?.test_id);
                     } catch (err) {
                         const axiosError = err as { response?: { data?: { error?: string } } };
                         message.error(axiosError?.response?.data?.error || "Failed to start radial test");

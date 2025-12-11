@@ -255,7 +255,7 @@ export default function TestingPattern1() {
         };
     }, [data?.test_id]);
 
-    // Fallback polling to hydrate telemetry if SSE is silent (e.g., historical view)
+    // Fallback polling to hydrate telemetry if SSE is silent
     useEffect(() => {
         if (!data?.test_id) return;
         let cancelled = false;
@@ -538,7 +538,7 @@ export default function TestingPattern1() {
     const handleStartTangential = async () => {
         console.log("➡️ Start Tangential Test clicked");
         try {
-            await startTestPhase('TANGENTIAL', data?.test_id);
+            await startTestPhase('TANGENTIAL', data?.test_id ?? undefined);
             console.log("✅ Starting tangential test");
         } catch (error) {
             console.error("❌ Failed to start tangential test:", error);
@@ -548,7 +548,7 @@ export default function TestingPattern1() {
     const handleStartRadial = async () => {
         console.log("➡️ Start Radial Test clicked");
         try {
-            await startTestPhase('RADIAL', data?.test_id);
+            await startTestPhase('RADIAL', data?.test_id ?? undefined);
             console.log("✅ Starting radial test");
         } catch (error) {
             console.error("❌ Failed to start radial test:", error);
@@ -1069,7 +1069,6 @@ export default function TestingPattern1() {
                         <div style={{ textAlign: 'center', marginTop: '10px' }}>
                             <Text type="secondary">
                                 Green dots represent detected boundaries at each angle.
-                                Hover over points to see exact measurements.
                             </Text>
                         </div>
                     </Card>

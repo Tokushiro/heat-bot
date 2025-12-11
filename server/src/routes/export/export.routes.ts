@@ -2,7 +2,8 @@ import { Router } from 'express';
 import {
     exportBoundaryTest,
     exportGridTest,
-    exportRadialTest
+    exportRadialTest,
+    exportComprehensiveTest
 } from '../../controllers/export/ExportController';
 
 const router = Router();
@@ -12,6 +13,9 @@ const router = Router();
  *
  * IEC-compliant CSV export endpoints for test data
  */
+
+// Comprehensive test export (all test types combined - IEC 63180 format)
+router.get('/comprehensive/:testId', exportComprehensiveTest);
 
 // Boundary test export
 router.get('/boundary/:testId', exportBoundaryTest);

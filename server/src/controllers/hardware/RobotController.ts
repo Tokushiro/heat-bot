@@ -74,7 +74,7 @@ export async function handleMoveCommand(req: Request, res: Response) {
 
             // Broadcast manual telemetry for UI (test_id 0 marks manual)
             if (result.position) {
-                const resultTimestamp = new Date().toISOString();
+                const resultTimestamp = new Date();
                 emitTelemetry({
                     test_id: 0,
                     robot_position_x: result.position.x,
@@ -87,7 +87,7 @@ export async function handleMoveCommand(req: Request, res: Response) {
                     success: result.success,
                     position: result.position,
                     duration: result.duration,
-                    timestamp: resultTimestamp
+                    timestamp: resultTimestamp.toISOString()
                 });
             } else {
                 emitRobotEvent("manual_move_result", {
@@ -127,7 +127,7 @@ export async function handleMoveCommand(req: Request, res: Response) {
             }
 
             if (currentPos) {
-                const stopTimestamp = new Date().toISOString();
+                const stopTimestamp = new Date();
                 emitTelemetry({
                     test_id: 0,
                     robot_position_x: currentPos.x,
@@ -139,7 +139,7 @@ export async function handleMoveCommand(req: Request, res: Response) {
                     action: 'stop',
                     success: true,
                     position: currentPos,
-                    timestamp: stopTimestamp
+                    timestamp: stopTimestamp.toISOString()
                 });
             } else {
                 emitRobotEvent("manual_move_result", {

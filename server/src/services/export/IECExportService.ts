@@ -15,6 +15,11 @@ interface TestMetadata {
     startTime: Date;
     endTime: Date;
     detectorId?: string;
+    sensorId?: string;
+    mountingHeight?: string;
+    hwVersion?: string;
+    swVersion?: string;
+    testPerson?: string;
     testEnvironment?: {
         temperature: number;
         humidity: number;
@@ -439,5 +444,304 @@ export class IECExportService {
         });
 
         return lines.join('\n');
+    }
+
+    /**
+     * Export comprehensive IEC 63180 test report (all test types combined)
+     * Format similar to Niko template with Overview, Boundary, Radial sections
+     */
+    static exportComprehensiveTest(
+        metadata: TestMetadata,
+        boundaryData: BoundaryTestData[],
+        radialData?: RadialTestData[]
+    ): string {
+        const lines: string[] = [];
+
+        // Header warning
+        lines.push('Overview,"FOR INTERNAL USE ONLY');
+        lines.push('DO NOT SHARE EXTERNALLY"');
+        lines.push('Overview,');
+        lines.push('Overview,');
+
+        // Title
+        lines.push('Overview,"PIR SENSOR PERFORMANCE');
+        lines.push('OVERVIEW"');
+        lines.push('Overview,');
+
+        // Metadata section
+        lines.push(`Overview,,Standard,IEC 63180 Ed. 1`);
+        lines.push(`Overview,,Test lab,H.E.A.T. Bot Testing System`);
+        lines.push(`Overview,,Test method,Automated - Robot System`);
+        lines.push(`Overview,,Test procedure,Automated PIR Detector Performance Test`);
+        lines.push('Overview,');
+
+        lines.push(`Overview,,Date,${metadata.startTime.toISOString().split('T')[0]}`);
+        lines.push(`Overview,,Manufacturer,${metadata.detectorId || 'N/A'}`);
+        lines.push(`Overview,,Product reference,${metadata.sensorId || 'N/A'}`);
+        lines.push(`Overview,,Description EUT,${metadata.testName}`);
+        lines.push(`Overview,,HW version,${metadata.hwVersion || 'N/A'}`);
+        lines.push(`Overview,,SW version,${metadata.swVersion || 'N/A'}`);
+        lines.push(`Overview,,Mounting height,${metadata.mountingHeight || '2.5 m - 3 m'}`);
+        lines.push(`Overview,,Note,Test ID ${metadata.testId}`);
+        lines.push('Overview,');
+
+        // Environmental conditions
+        if (metadata.testEnvironment) {
+            lines.push(`Overview,,Room temperature,${metadata.testEnvironment.temperature.toFixed(1)} °C`);
+            lines.push(`Overview,,Humidity,${metadata.testEnvironment.humidity.toFixed(1)} % RH`);
+        } else {
+            lines.push(`Overview,,Room temperature,22 °C`);
+        }
+        lines.push(`Overview,,Test person,${metadata.testPerson || 'Automated System'}`);
+        lines.push('Overview,');
+        lines.push('Overview,');
+
+        // Tests executed summary
+        lines.push('Overview,,TESTS EXECUTED');
+
+        // Calculate verdicts
+        const boundaryVerdict = this.calculateBoundaryVerdict(boundaryData);
+        const radialVerdict = radialData ? this.calculateRadialVerdict(radialData) : null;
+
+        lines.push(`Overview,,TANGENTIAL MOVEMENT BOUNDARY,,,,executed,yes`);
+        lines.push(`Overview,,Verdict diameter,,,${boundaryVerdict.diameter.toFixed(1)},m`);
+
+        if (radialData && radialData.length > 0) {
+            lines.push(`Overview,,RADIAL MOTION,,,,executed,yes`);
+            lines.push(`Overview,,Verdict diameter,,,${radialVerdict?.diameter.toFixed(1) || '0.0'},m`);
+        }
+
+        lines.push('Overview,');
+        lines.push('Overview,');
+
+        // ===========================
+        // TANGENTIAL BOUNDARY SECTION
+        // ===========================
+        lines.push('Major - Tangential Boundary,"FOR INTERNAL USE ONLY');
+        lines.push('DO NOT SHARE EXTERNALLY"');
+        lines.push('Major - Tangential Boundary,');
+        lines.push('Major - Tangential Boundary,');
+        lines.push('Major - Tangential Boundary,"PIR SENSOR PERFORMANCE');
+        lines.push('TANGENTIAL MOVEMENT BOUNDARY"');
+        lines.push('Major - Tangential Boundary,');
+
+        // Repeat metadata for Tangential Boundary sheet
+        lines.push(`Major - Tangential Boundary,,Standard,IEC 63180 Ed. 1`);
+        lines.push(`Major - Tangential Boundary,,Test lab,H.E.A.T. Bot Testing System`);
+        lines.push(`Major - Tangential Boundary,,Test method,Automated - Robot System`);
+        lines.push(`Major - Tangential Boundary,,Test procedure,Automated PIR Detector Performance Test`);
+        lines.push('Major - Tangential Boundary,');
+        lines.push(`Major - Tangential Boundary,,Date,${metadata.startTime.toISOString().split('T')[0]}`);
+        lines.push(`Major - Tangential Boundary,,Manufacturer,${metadata.detectorId || 'N/A'}`);
+        lines.push(`Major - Tangential Boundary,,Product reference,${metadata.sensorId || 'N/A'}`);
+        lines.push(`Major - Tangential Boundary,,Description EUT,${metadata.testName}`);
+        lines.push(`Major - Tangential Boundary,,HW version,${metadata.hwVersion || ''}`);
+        lines.push(`Major - Tangential Boundary,,SW version,${metadata.swVersion || ''}`);
+        lines.push(`Major - Tangential Boundary,,Mounting height,${metadata.mountingHeight || '2.5 m - 3 m'}`);
+        lines.push(`Major - Tangential Boundary,,Note,Test ID ${metadata.testId}`);
+        lines.push('Major - Tangential Boundary,');
+
+        if (metadata.testEnvironment) {
+            lines.push(`Major - Tangential Boundary,,Room temperature,${metadata.testEnvironment.temperature.toFixed(1)} °C`);
+            lines.push(`Major - Tangential Boundary,,Humidity,${metadata.testEnvironment.humidity.toFixed(1)} % RH`);
+        } else {
+            lines.push(`Major - Tangential Boundary,,Room temperature,22 °C`);
+        }
+        lines.push(`Major - Tangential Boundary,,Test person,${metadata.testPerson || 'Automated System'}`);
+        lines.push('Major - Tangential Boundary,');
+        lines.push('Major - Tangential Boundary,');
+
+        // 15% rule calculation
+        const totalAngles = [...new Set(boundaryData.map(d => d.angle))].length;
+        const failureThreshold = Math.ceil(totalAngles * 0.15);
+        const failureCount = this.calculateFailureCount(boundaryData, boundaryVerdict.radius);
+        const failurePercent = (failureCount / totalAngles * 100).toFixed(2);
+
+        lines.push(`Major - Tangential Boundary,,Calculation of the detection range acc to the 15 % rule (IEC 63180)`);
+        lines.push(`Major - Tangential Boundary,,# < verdict,${failureCount}`);
+        lines.push(`Major - Tangential Boundary,,% < verdict,${failurePercent},%`);
+        lines.push('Major - Tangential Boundary,');
+        lines.push(`Major - Tangential Boundary,,Verdict radius,${boundaryVerdict.radius.toFixed(1)},m`);
+        lines.push(`Major - Tangential Boundary,,Verdict diameter,${boundaryVerdict.diameter.toFixed(1)},m`);
+        lines.push('Major - Tangential Boundary,');
+        lines.push('Major - Tangential Boundary,');
+
+        // Boundary measurements table
+        lines.push(`Major - Tangential Boundary,,,,,,,,,,,,,Angle (°),Measurement (m),Verdict (m)`);
+
+        // Group by angle and get average detection distance
+        const angleGroups = this.groupByAngle(boundaryData);
+        const sortedAngles = Object.keys(angleGroups).map(Number).sort((a, b) => a - b);
+
+        sortedAngles.forEach(angle => {
+            const measurements = angleGroups[angle];
+            const detectedMeasurements = measurements.filter(m => m.detected);
+            const avgDistance = detectedMeasurements.length > 0
+                ? detectedMeasurements.reduce((sum, m) => sum + m.distance, 0) / detectedMeasurements.length
+                : 0;
+
+            lines.push(`Major - Tangential Boundary,,,,,,,,,,,,,${angle},${avgDistance > 0 ? avgDistance.toFixed(2) : ''},${boundaryVerdict.radius.toFixed(1)}`);
+        });
+
+        lines.push('Major - Tangential Boundary,');
+
+        // ===========================
+        // RADIAL SECTION (if available)
+        // ===========================
+        if (radialData && radialData.length > 0 && radialVerdict) {
+            lines.push('Major - Radial,"FOR INTERNAL USE ONLY');
+            lines.push('DO NOT SHARE EXTERNALLY"');
+            lines.push('Major - Radial,');
+            lines.push('Major - Radial,"PIR SENSOR PERFORMANCE');
+            lines.push('RADIAL MOTION"');
+            lines.push('Major - Radial,');
+
+            // Metadata
+            lines.push(`Major - Radial,,Standard,IEC 63180 Ed. 1`);
+            lines.push(`Major - Radial,,Test lab,H.E.A.T. Bot Testing System`);
+            lines.push(`Major - Radial,,Test method,Automated - Robot System`);
+            lines.push(`Major - Radial,,Test procedure,Automated PIR Detector Performance Test`);
+            lines.push('Major - Radial,');
+            lines.push(`Major - Radial,,Date,${metadata.startTime.toISOString().split('T')[0]}`);
+            lines.push(`Major - Radial,,Manufacturer,${metadata.detectorId || 'N/A'}`);
+            lines.push(`Major - Radial,,Product reference,${metadata.sensorId || 'N/A'}`);
+            lines.push(`Major - Radial,,Description EUT,${metadata.testName}`);
+            lines.push(`Major - Radial,,HW version,${metadata.hwVersion || ''}`);
+            lines.push(`Major - Radial,,SW version,${metadata.swVersion || ''}`);
+            lines.push(`Major - Radial,,Mounting height,${metadata.mountingHeight || '2.5 m - 3 m'}`);
+            lines.push(`Major - Radial,,Note,Test ID ${metadata.testId}`);
+            lines.push('Major - Radial,');
+
+            if (metadata.testEnvironment) {
+                lines.push(`Major - Radial,,Room temperature,${metadata.testEnvironment.temperature.toFixed(1)} °C`);
+                lines.push(`Major - Radial,,Humidity,${metadata.testEnvironment.humidity.toFixed(1)} % RH`);
+            } else {
+                lines.push(`Major - Radial,,Room temperature,22 °C`);
+            }
+            lines.push(`Major - Radial,,Test person,${metadata.testPerson || 'Automated System'}`);
+            lines.push('Major - Radial,');
+
+            // 15% rule for radial
+            const radialAngles = [...new Set(radialData.map(d => d.angle))].length;
+            const radialFailureThreshold = Math.ceil(radialAngles * 0.15);
+            const radialFailureCount = this.calculateRadialFailureCount(radialData, radialVerdict.radius);
+            const radialFailurePercent = (radialFailureCount / radialAngles * 100).toFixed(2);
+
+            lines.push(`Major - Radial,,Calculation of the detection range acc to the 15 % rule (IEC 63180)`);
+            lines.push(`Major - Radial,,# < verdict,${radialFailureCount}`);
+            lines.push(`Major - Radial,,% < verdict,${radialFailurePercent},%`);
+            lines.push('Major - Radial,');
+            lines.push(`Major - Radial,,Verdict radius,${radialVerdict.radius.toFixed(1)},m`);
+            lines.push(`Major - Radial,,Verdict diameter,${radialVerdict.diameter.toFixed(1)},m`);
+            lines.push('Major - Radial,');
+
+            // Radial measurements table
+            lines.push(`Major - Radial,,,,,,,,,,,,,Angle (°),Measurement 1 (m),Measurement 2 (m),Radial detection avg (m),Verdict (m)`);
+
+            const radialAngleGroups = this.groupByAngle(radialData);
+            const sortedRadialAngles = Object.keys(radialAngleGroups).map(Number).sort((a, b) => a - b);
+
+            sortedRadialAngles.forEach(angle => {
+                const measurements = radialAngleGroups[angle];
+                const detectedDistances = measurements.filter(m => m.detected).map(m => m.distance);
+                const maxDistance = detectedDistances.length > 0 ? Math.max(...detectedDistances) : 0;
+                const meas1 = measurements[0]?.distance || 0;
+                const meas2 = measurements[1]?.distance || meas1;
+                const avg = detectedDistances.length > 0 ? detectedDistances.reduce((sum, d) => sum + d, 0) / detectedDistances.length : 0;
+
+                lines.push(`Major - Radial,,,,,,,,,,,,,${angle},${meas1 > 0 ? meas1.toFixed(1) : ''},${meas2 > 0 ? meas2.toFixed(1) : ''},${avg > 0 ? avg.toFixed(2) : ''},${radialVerdict.radius.toFixed(1)}`);
+            });
+        }
+
+        lines.push('');
+        lines.push(`Generated by H.E.A.T. Bot Testing System,${new Date().toISOString()}`);
+        lines.push('Compliant with IEC 63180 Standard');
+
+        return lines.join('\n');
+    }
+
+    private static calculateBoundaryVerdict(data: BoundaryTestData[]): { radius: number; diameter: number } {
+        const angleGroups = this.groupByAngle(data);
+        const distances: number[] = [];
+
+        Object.keys(angleGroups).forEach(angleKey => {
+            const measurements = angleGroups[Number(angleKey)];
+            const detectedMeasurements = measurements.filter(m => m.detected);
+            if (detectedMeasurements.length > 0) {
+                const avgDistance = detectedMeasurements.reduce((sum, m) => sum + m.distance, 0) / detectedMeasurements.length;
+                distances.push(avgDistance);
+            }
+        });
+
+        distances.sort((a, b) => a - b);
+
+        // Apply 15% rule: exclude bottom 15% of measurements
+        const threshold = Math.ceil(distances.length * 0.15);
+        const validDistances = distances.slice(threshold);
+
+        const radius = validDistances.length > 0 ? Math.min(...validDistances) : 0;
+        return { radius, diameter: radius * 2 };
+    }
+
+    private static calculateRadialVerdict(data: RadialTestData[]): { radius: number; diameter: number } {
+        const angleGroups = this.groupByAngle(data);
+        const maxDistances: number[] = [];
+
+        Object.keys(angleGroups).forEach(angleKey => {
+            const measurements = angleGroups[Number(angleKey)];
+            const detectedDistances = measurements.filter(m => m.detected).map(m => m.distance);
+            if (detectedDistances.length > 0) {
+                maxDistances.push(Math.max(...detectedDistances));
+            }
+        });
+
+        maxDistances.sort((a, b) => a - b);
+
+        // Apply 15% rule
+        const threshold = Math.ceil(maxDistances.length * 0.15);
+        const validDistances = maxDistances.slice(threshold);
+
+        const radius = validDistances.length > 0 ? Math.min(...validDistances) : 0;
+        return { radius, diameter: radius * 2 };
+    }
+
+    private static calculateFailureCount(data: BoundaryTestData[], verdictRadius: number): number {
+        const angleGroups = this.groupByAngle(data);
+        let failureCount = 0;
+
+        Object.keys(angleGroups).forEach(angleKey => {
+            const measurements = angleGroups[Number(angleKey)];
+            const detectedMeasurements = measurements.filter(m => m.detected);
+            if (detectedMeasurements.length > 0) {
+                const avgDistance = detectedMeasurements.reduce((sum, m) => sum + m.distance, 0) / detectedMeasurements.length;
+                if (avgDistance < verdictRadius) {
+                    failureCount++;
+                }
+            } else {
+                failureCount++;
+            }
+        });
+
+        return failureCount;
+    }
+
+    private static calculateRadialFailureCount(data: RadialTestData[], verdictRadius: number): number {
+        const angleGroups = this.groupByAngle(data);
+        let failureCount = 0;
+
+        Object.keys(angleGroups).forEach(angleKey => {
+            const measurements = angleGroups[Number(angleKey)];
+            const detectedDistances = measurements.filter(m => m.detected).map(m => m.distance);
+            if (detectedDistances.length > 0) {
+                const maxDistance = Math.max(...detectedDistances);
+                if (maxDistance < verdictRadius) {
+                    failureCount++;
+                }
+            } else {
+                failureCount++;
+            }
+        });
+
+        return failureCount;
     }
 }
