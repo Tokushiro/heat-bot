@@ -349,8 +349,12 @@ export default function TestingPattern1() {
                             }
                         }
                     }
-                } catch (err) {
-                    console.error("[TestingPattern1] Error checking/restoring state:", err);
+                } catch (err: any) {
+                    if (err?.response?.status === 404) {
+                        console.log("[TestingPattern1] No persisted state yet for this test (404) – skipping restore");
+                    } else {
+                        console.error("[TestingPattern1] Error checking/restoring state:", err);
+                    }
                 }
             }
         };
@@ -1427,4 +1431,3 @@ export default function TestingPattern1() {
         </Layout>
     );
 }
-

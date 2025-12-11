@@ -709,7 +709,7 @@ export class MasterTestOrchestrator extends EventEmitter {
                 continue;
             }
 
-            const detected = await this.testPositionWithRepeats(
+            const detected = await this.testTangentialPositionWithRepeats(
                 test_id,
                 'BOUNDARY_DETECTION_RADIAL',
                 angle,
@@ -721,6 +721,48 @@ export class MasterTestOrchestrator extends EventEmitter {
 
             if (detected && detectedDistance === null) {
                 detectedDistance = distance;
+
+                // Per IEC logic: after a positive detection, step 1 m farther to confirm the true boundary
+                const fartherDistance = Math.min(distance + 1, startDistance);
+                if (fartherDistance > distance) {
+                    const fartherDetected = await this.testTangentialPositionWithRepeats(
+                        test_id,
+                        'BOUNDARY_DETECTION_RADIAL',
+                        angle,
+                        fartherDistance,
+                        speed,
+                        waitTime,
+                        repeatCount
+                    );
+
+                    if (fartherDetected) {
+                        detectedDistance = fartherDistance;
+                    } else {
+                        noDetectionDistance = fartherDistance;
+                    }
+                }
+
+                // If we have both detection and no-detection, refine inward by 0.5m
+                if (detectedDistance !== null && noDetectionDistance !== null) {
+                    const tighterDistance = Math.max(endDistance, (detectedDistance + noDetectionDistance) / 2 - 0.5);
+                    if (tighterDistance < detectedDistance) {
+                        const tighterDetected = await this.testTangentialPositionWithRepeats(
+                            test_id,
+                            'BOUNDARY_DETECTION_RADIAL',
+                            angle,
+                            tighterDistance,
+                            speed,
+                            waitTime,
+                            repeatCount
+                        );
+
+                        if (tighterDetected) {
+                            detectedDistance = tighterDistance;
+                        } else {
+                            noDetectionDistance = tighterDistance;
+                        }
+                    }
+                }
                 break;
             } else if (!detected) {
                 noDetectionDistance = distance;
@@ -797,16 +839,52 @@ export class MasterTestOrchestrator extends EventEmitter {
                 });
             }
         }
+
+        // After running all angles, persist averaged radial ranges per angle
+        await this.saveRadialAverages(config.test_id);
     }
 
     /**
-     * Execute tangential test phase (sweeping around at fixed radii)
+     * Build Cartesian grid cells (0.5 m spacing) up to the max compliance radius.
+     */
+    private buildTangentialGridCells(config: MasterTestConfiguration) {
+        const cellSize = 0.5;
+        const fallbackRadius = (config.compliance_test_distances && config.compliance_test_distances.length > 0)
+            ? Math.max(...config.compliance_test_distances)
+            : 3;
+        const maxRadius = Math.max(fallbackRadius, config.boundary_end_distance || fallbackRadius);
+
+        const gridExtent = Math.max(1, Math.ceil(maxRadius / cellSize));
+        const gridSize = gridExtent * 2 + 1;
+        const cells: { row: number; col: number; angle: number; radius: number }[] = [];
+
+        for (let row = 0; row < gridSize; row++) {
+            for (let col = 0; col < gridSize; col++) {
+                const x = (col - gridExtent) * cellSize;
+                const y = (gridExtent - row) * cellSize; // invert rows so +y is “forward”
+                const radius = Math.sqrt(x * x + y * y);
+
+                if (radius < 1e-6 || radius > maxRadius + 1e-6) continue;
+
+                const angle = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+                cells.push({ row, col, angle, radius });
+            }
+        }
+
+        cells.sort((a, b) => {
+            if (Math.abs(a.radius - b.radius) > 1e-3) return a.radius - b.radius;
+            return a.angle - b.angle;
+        });
+
+        return cells;
+    }
+
+    /**
+     * Execute tangential test phase (sweeping around a Cartesian 0.5 m grid)
      */
     private async executeTangentialTest(config: MasterTestConfiguration): Promise<void> {
-        const testDistances = config.compliance_test_distances;
-        const angleStep = config.compliance_tangential_step || 15;
-        const totalAngles = Math.floor(360 / angleStep);
-        const totalPositions = testDistances.length * totalAngles;
+        const cells = this.buildTangentialGridCells(config);
+        const totalPositions = cells.length;
 
         this.emit("phase_progress", {
             phase: 'TANGENTIAL_TEST',
@@ -816,45 +894,48 @@ export class MasterTestOrchestrator extends EventEmitter {
 
         let completedCount = 0;
 
-        // For each test distance (e.g., 2m, 3m from sensor)
-        for (const testDistance of testDistances) {
+        for (const cell of cells) {
+            if (this.isPaused) await this.waitForResume();
             this.ensureNotStopped();
 
-            // Sweep around 360° at this fixed radius
-            for (let angle = 0; angle < 360; angle += angleStep) {
-                if (this.isPaused) await this.waitForResume();
-                this.ensureNotStopped();
+            const detected = await this.testTangentialPositionWithRepeats(
+                config.test_id,
+                'GRID_TANGENTIAL',
+                cell.angle,
+                cell.radius,
+                config.movement_speed || 50,
+                config.detection_wait_time || 2000,
+                config.repeat_measurements || 2,
+                {
+                    cell_row: cell.row,
+                    cell_col: cell.col
+                }
+            );
 
-                const detected = await this.testPositionWithRepeats(
-                    config.test_id,
-                    'COMPLIANCE_TANGENTIAL',
-                    angle,
-                    testDistance,
-                    config.movement_speed || 50,
-                    config.detection_wait_time || 2000,
-                    config.repeat_measurements || 2
-                );
+            // Emit compliance measurement event for client to track results
+            this.emit("compliance_measurement_completed", {
+                test_id: config.test_id,
+                angle: cell.angle,
+                distance: cell.radius,
+                cell_row: cell.row,
+                cell_col: cell.col,
+                detected
+            });
 
-                // Emit compliance measurement event for client to track results
-                this.emit("compliance_measurement_completed", {
-                    test_id: config.test_id,
-                    angle,
-                    distance: testDistance,
-                    detected
-                });
+            completedCount++;
+            this.testState!.completed_step_count++;
 
-                completedCount++;
-                this.testState!.completed_step_count++;
+            await this.updateRobotPosition();
+            await this.saveTestState();
 
-                await this.updateRobotPosition();
-                await this.saveTestState();
+            this.emit("phase_progress", {
+                phase: 'TANGENTIAL_TEST',
+                total_positions: totalPositions,
+                completed_positions: completedCount
+            });
 
-                this.emit("phase_progress", {
-                    phase: 'TANGENTIAL_TEST',
-                    total_positions: totalPositions,
-                    completed_positions: completedCount
-                });
-            }
+            // Respect detector dead-time between cells
+            await this.delay(250);
         }
     }
 
@@ -963,18 +1044,27 @@ export class MasterTestOrchestrator extends EventEmitter {
         waitTime: number,
         repeatCount: number
     ): Promise<void> {
+        // Simulate a 0.5m grid around the detector at the given radius: walk sectors and map to grid cells
+        const totalCells = Math.ceil(360 / angleStep);
+        let cellRow = 0;
+        let cellCol = 0;
+
         for (let angle = 0; angle < 360; angle += angleStep) {
             if (this.isPaused) await this.waitForResume();
             this.ensureNotStopped();
 
             const detected = await this.testPositionWithRepeats(
                 test_id,
-                'COMPLIANCE_TANGENTIAL',
+                'GRID_TANGENTIAL',
                 angle,
                 radius,
                 speed,
                 waitTime,
-                repeatCount
+                repeatCount,
+                {
+                    cell_row: cellRow,
+                    cell_col: cellCol
+                }
             );
 
             // Emit compliance measurement event for client to track results
@@ -984,6 +1074,15 @@ export class MasterTestOrchestrator extends EventEmitter {
                 distance: radius,
                 detected
             });
+
+            cellCol++;
+            if (cellCol >= totalCells) {
+                cellCol = 0;
+                cellRow++;
+            }
+
+            // Respect detector dead-time by waiting before the next sector
+            await this.delay(500);
         }
     }
 
@@ -1007,8 +1106,8 @@ export class MasterTestOrchestrator extends EventEmitter {
                 step_type,
                 sequence_no: ++this.sequenceCounter,
                 angle,
-                cell_row: null,
-                cell_col: null,
+                cell_row: metadata?.cell_row ?? null,
+                cell_col: metadata?.cell_col ?? null,
                 distance_1: distance,
                 distance_2: metadata?.offset_from_boundary || null,
                 distance_avg: null,
@@ -1074,6 +1173,112 @@ export class MasterTestOrchestrator extends EventEmitter {
             } catch (error) {
                 console.error("[MasterTest] Measurement failed:", error);
                 
+                await testStepService.updateTestStep(stepId, {
+                    status: 'ERROR',
+                    finished_at: new Date()
+                });
+
+                throw error;
+            }
+        }
+
+        this.currentStepId = null;
+        return measurements[0] || measurements[1];
+    }
+
+    /**
+     * Tangential variant of testPositionWithRepeats
+     * Simulates the IEC tangential pass: move tangentially across the arc, wait, and evaluate detection.
+     */
+    private async testTangentialPositionWithRepeats(
+        test_id: number,
+        step_type: string,
+        angle: number,
+        distance: number,
+        speed: number,
+        waitTime: number,
+        repeatCount: number,
+        metadata?: any
+    ): Promise<boolean> {
+        const measurements: boolean[] = [];
+
+        for (let attempt = 1; attempt <= repeatCount; attempt++) {
+            this.ensureNotStopped();
+            const stepId = await testStepService.insertTestStep({
+                test_step_id: null,
+                test_id,
+                step_type,
+                sequence_no: ++this.sequenceCounter,
+                angle,
+                cell_row: metadata?.cell_row ?? null,
+                cell_col: metadata?.cell_col ?? null,
+                distance_1: distance,
+                distance_2: metadata?.offset_from_boundary || null,
+                distance_avg: null,
+                detection_1: null,
+                detection_2: null,
+                detection_final: null,
+                status: 'PENDING',
+                started_at: null,
+                finished_at: null
+            });
+
+            this.currentStepId = stepId;
+
+            try {
+                await testStepService.updateTestStep(stepId, {
+                    status: 'RUNNING',
+                    started_at: new Date()
+                });
+
+                this.detectionBuffer = [];
+
+                this.emit("movement_started", {
+                    test_step_id: stepId,
+                    angle,
+                    distance,
+                    attempt,
+                    cell_row: metadata?.cell_row ?? null,
+                    cell_col: metadata?.cell_col ?? null
+                });
+
+                // Move tangentially across the arc at this radius
+                const result = await RobotAPIFactory.getInstance().moveTangential(angle, distance, speed);
+                // IEC asks for a pause at position; reuse waitTime to allow detections
+                await this.delay(waitTime);
+
+                this.ensureNotStopped();
+
+                const detected = this.detectionBuffer.some(e => e.detected);
+                measurements.push(detected);
+
+                const updates: any = {
+                    status: 'COMPLETED',
+                    finished_at: new Date()
+                };
+
+                if (attempt === 1) {
+                    updates.detection_1 = detected;
+                } else if (attempt === 2) {
+                    updates.detection_2 = detected;
+                    updates.detection_final = measurements[0] || measurements[1];
+                }
+
+                await testStepService.updateTestStep(stepId, updates);
+
+                this.emit("measurement_completed", {
+                    test_step_id: stepId,
+                    angle,
+                    distance,
+                    attempt,
+                    detected,
+                    cell_row: metadata?.cell_row ?? null,
+                    cell_col: metadata?.cell_col ?? null
+                });
+
+            } catch (error) {
+                console.error("[MasterTest] Tangential measurement failed:", error);
+
                 await testStepService.updateTestStep(stepId, {
                     status: 'ERROR',
                     finished_at: new Date()
@@ -1313,10 +1518,8 @@ export class MasterTestOrchestrator extends EventEmitter {
             const boundaries = this.testState?.boundary_results.filter(b => b.detection_boundary !== null).length || config.boundary_angles.length;
             return boundaries * config.compliance_test_distances.length;
         } else if (phase === 'TANGENTIAL_TEST') {
-            // Tangential test: sweep 360° at fixed radii
-            const angleStep = config.compliance_tangential_step || 15;
-            const totalAngles = Math.floor(360 / angleStep);
-            return config.compliance_test_distances.length * totalAngles;
+            // Tangential test: number of grid cells to visit
+            return this.buildTangentialGridCells(config).length;
         } else {
             // COMPLETED or unknown
             return 0;
@@ -1536,6 +1739,28 @@ export class MasterTestOrchestrator extends EventEmitter {
         }
     }
 
+    /**
+     * Persist averaged radial ranges per angle based on completed COMPLIANCE_RADIAL steps
+     */
+    private async saveRadialAverages(test_id: number): Promise<void> {
+        const result = await pool.query(
+            `SELECT angle, AVG(distance_1) FILTER (WHERE detection_final = true) AS avg_detected
+             FROM test_step
+             WHERE test_id = $1 AND step_type IN ('COMPLIANCE_RADIAL', 'RADIAL_COMPLIANCE')
+             GROUP BY angle`,
+            [test_id]
+        );
+
+        for (const row of result.rows) {
+            await pool.query(
+                `INSERT INTO radial_boundary (test_id, angle, radial_detection1_avg, specification)
+                 VALUES ($1, $2, $3, $3)
+                 ON CONFLICT (test_id, angle) DO UPDATE SET radial_detection1_avg = $3`,
+                [test_id, row.angle, row.avg_detected]
+            );
+        }
+    }
+
     getTestState(): TestState | null {
         return this.testState;
     }
@@ -1649,3 +1874,4 @@ export class MasterTestOrchestrator extends EventEmitter {
 }
 
 export default MasterTestOrchestrator;
+

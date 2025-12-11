@@ -79,6 +79,10 @@ export async function exportBoundaryTest(req: Request, res: Response) {
             startTime: new Date(test.started_at),
             endTime: new Date(test.finished_at),
             detectorId: test.sensor_id,
+            testLab: test.test_lab,
+            testStandard: test.test_standard,
+            testMethod: test.test_method,
+            testChoiceName: test.choice_name,
             testEnvironment: (envResult.rows[0].avg_temp !== null && envResult.rows[0].avg_temp !== undefined) ? {
                 temperature: parseFloat(envResult.rows[0].avg_temp),
                 humidity: parseFloat(envResult.rows[0].avg_humidity)
@@ -131,12 +135,12 @@ export async function exportGridTest(req: Request, res: Response) {
         const test = testResult.rows[0];
 
         // Fetch grid test steps (using test_step table)
-        // Note: Grid test uses test_step table with TANGENTIAL_TEST type
+        // Prefer explicit grid cell rows/cols when present
         const cellsQuery = `
-            SELECT angle, distance_1, detection_final as detected
+            SELECT cell_row, cell_col, detection_final as detected, distance_1, angle
             FROM test_step
-            WHERE test_id = $1 AND step_type IN ('COMPLIANCE_TANGENTIAL', 'TANGENTIAL_SWEEP')
-            ORDER BY angle, sequence_no
+            WHERE test_id = $1 AND step_type IN ('COMPLIANCE_TANGENTIAL', 'TANGENTIAL_SWEEP', 'GRID_TANGENTIAL')
+            ORDER BY cell_row NULLS LAST, cell_col NULLS LAST, angle, sequence_no
         `;
         const cellsResult = await pool.query(cellsQuery, [testId]);
 
@@ -160,18 +164,24 @@ export async function exportGridTest(req: Request, res: Response) {
         const envResult = await pool.query(envQuery, [testId]);
 
         // Transform data - map test_step results to grid cell format
-        // For tangential tests, we organize by angle and distance
         const cells = cellsResult.rows.map((row: any, index: number) => {
             const detected = row.detected === true || row.detected === 'true';
+            const cellRow = row.cell_row !== null && row.cell_row !== undefined
+                ? parseInt(row.cell_row, 10)
+                : Math.floor(index / 6); // fallback layout
+            const cellCol = row.cell_col !== null && row.cell_col !== undefined
+                ? parseInt(row.cell_col, 10)
+                : index % 6;
+
             return {
-                cellRow: Math.floor(index / 6), // Assuming 6 columns
-                cellCol: index % 6,
-                centerX: row.distance_1 * Math.cos(row.angle * Math.PI / 180),
-                centerY: row.distance_1 * Math.sin(row.angle * Math.PI / 180),
+                cellRow,
+                cellCol,
+                centerX: row.distance_1 ? row.distance_1 * Math.cos((row.angle || 0) * Math.PI / 180) : 0,
+                centerY: row.distance_1 ? row.distance_1 * Math.sin((row.angle || 0) * Math.PI / 180) : 0,
                 detected,
                 attempts: 1,
                 coveragePercent: detected ? 100 : 0,
-                anglesCovered: [row.angle]
+                anglesCovered: row.angle !== undefined ? [row.angle] : []
             };
         });
 
@@ -182,6 +192,10 @@ export async function exportGridTest(req: Request, res: Response) {
             startTime: new Date(test.started_at),
             endTime: new Date(test.finished_at),
             detectorId: test.sensor_id,
+            testLab: test.test_lab,
+            testStandard: test.test_standard,
+            testMethod: test.test_method,
+            testChoiceName: test.choice_name,
             testEnvironment: (envResult.rows[0].avg_temp !== null && envResult.rows[0].avg_temp !== undefined) ? {
                 temperature: parseFloat(envResult.rows[0].avg_temp),
                 humidity: parseFloat(envResult.rows[0].avg_humidity)
@@ -260,6 +274,16 @@ export async function exportRadialTest(req: Request, res: Response) {
             repeatNumber: row.repeat_number
         }));
 
+        // Attach averaged ranges from radial_boundary if present
+        const avgQuery = `
+            SELECT angle, radial_detection1_avg AS avg_range
+            FROM radial_boundary
+            WHERE test_id = $1
+        `;
+        const avgResult = await pool.query(avgQuery, [testId]);
+        const avgMap = new Map<number, number>();
+        avgResult.rows.forEach((r: any) => avgMap.set(r.angle, parseFloat(r.avg_range)));
+
         const metadata = {
             testId: test.test_id,
             testName: test.test_name,
@@ -267,10 +291,16 @@ export async function exportRadialTest(req: Request, res: Response) {
             startTime: new Date(test.started_at),
             endTime: new Date(test.finished_at),
             detectorId: test.sensor_id,
+            testLab: test.test_lab,
+            testStandard: test.test_standard,
+            testMethod: test.test_method,
+            testChoiceName: test.choice_name,
             testEnvironment: (envResult.rows[0].avg_temp !== null && envResult.rows[0].avg_temp !== undefined) ? {
                 temperature: parseFloat(envResult.rows[0].avg_temp),
                 humidity: parseFloat(envResult.rows[0].avg_humidity)
-            } : undefined
+            } : undefined,
+            // Provide averaged ranges per angle when available
+            radialAverages: avgMap
         };
 
         // Generate CSV
@@ -306,10 +336,22 @@ export async function exportComprehensiveTest(req: Request, res: Response) {
 
         // Fetch test metadata with sensor information
         const testQuery = `
-            SELECT t.test_id, t.test_name, t.sensor_id, t.started_at, t.finished_at, t.status,
-                   s.hw_version, s.sw_version, s.mounting_height
+            SELECT t.test_id,
+                   t.test_name,
+                   t.sensor_id,
+                   t.started_at,
+                   t.finished_at,
+                   t.status,
+                   s.hw_version,
+                   s.sw_version,
+                   s.mounting_height,
+                   tc.test_name    AS choice_name,
+                   tc.test_standard,
+                   tc.test_method,
+                   tc.test_lab
             FROM test t
             LEFT JOIN sensor s ON t.sensor_id = s.sensor_id
+            LEFT JOIN test_choice tc ON t.test_choice = tc.test_choice_id
             WHERE t.test_id = $1
         `;
         const testResult = await pool.query(testQuery, [testId]);
@@ -433,6 +475,10 @@ export async function exportComprehensiveTest(req: Request, res: Response) {
             hwVersion: test.hw_version,
             swVersion: test.sw_version,
             testPerson: 'H.E.A.T. Bot System',
+            testLab: test.test_lab,
+            testStandard: test.test_standard,
+            testMethod: test.test_method,
+            testChoiceName: test.choice_name,
             testEnvironment: (envResult.rows[0].avg_temp !== null && envResult.rows[0].avg_temp !== undefined) ? {
                 temperature: parseFloat(envResult.rows[0].avg_temp),
                 humidity: parseFloat(envResult.rows[0].avg_humidity)

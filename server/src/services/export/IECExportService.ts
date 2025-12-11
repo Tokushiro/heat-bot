@@ -283,7 +283,7 @@ export class IECExportService {
 
         // Measurement data table
         lines.push('=== RADIAL MEASUREMENTS ===');
-        lines.push('Angle (°),Distance (m),Detected,Timestamp,Repeat #,Detection Range');
+        lines.push('Angle (°),Distance (m),Detected,Timestamp,Repeat #,Max Detected Range,Avg Detected Range');
         lines.push('');
 
         // Group by angle
@@ -295,11 +295,14 @@ export class IECExportService {
             // Find detection range for this angle
             const detectedDistances = measurements.filter((m: RadialTestData) => m.detected).map((m: RadialTestData) => m.distance);
             const maxDetectedDistance = detectedDistances.length > 0 ? Math.max(...detectedDistances) : 0;
+            const avgDetectedDistance = detectedDistances.length > 0
+                ? detectedDistances.reduce((sum, d) => sum + d, 0) / detectedDistances.length
+                : 0;
 
             measurements.forEach((m: RadialTestData) => {
                 lines.push(
                     `${m.angle},${m.distance.toFixed(3)},${m.detected ? 'YES' : 'NO'},` +
-                    `${m.timestamp.toISOString()},${m.repeatNumber},${maxDetectedDistance.toFixed(3)}`
+                    `${m.timestamp.toISOString()},${m.repeatNumber},${maxDetectedDistance.toFixed(3)},${avgDetectedDistance.toFixed(3)}`
                 );
             });
         });
@@ -308,19 +311,19 @@ export class IECExportService {
 
         // Angular range analysis
         lines.push('=== ANGULAR RANGE ANALYSIS ===');
-        lines.push('Angle (°),Detection Range (m),Measurements,Detection Rate (%)');
+        lines.push('Angle (°),Avg Detected Range (m),Measurements,Detection Rate (%)');
 
         Object.keys(angleGroups).sort((a, b) => Number(a) - Number(b)).forEach((angleKey: string) => {
             const angle = Number(angleKey);
             const measurements = angleGroups[angle];
             const detectedMeasurements = measurements.filter((m: RadialTestData) => m.detected);
-            const maxRange = detectedMeasurements.length > 0
-                ? Math.max(...detectedMeasurements.map((m: RadialTestData) => m.distance))
+            const avgRange = detectedMeasurements.length > 0
+                ? detectedMeasurements.reduce((sum, m) => sum + m.distance, 0) / detectedMeasurements.length
                 : 0;
             const detectionRate = (detectedMeasurements.length / measurements.length) * 100;
 
             lines.push(
-                `${angle},${maxRange.toFixed(3)},${measurements.length},${detectionRate.toFixed(1)}`
+                `${angle},${avgRange.toFixed(3)},${measurements.length},${detectionRate.toFixed(1)}`
             );
         });
 

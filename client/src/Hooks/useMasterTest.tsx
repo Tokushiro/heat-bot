@@ -81,6 +81,7 @@ export function useMasterTest() {
     const currentPhaseRef = useRef<TestPhase | null>(null);
     const modalShownRef = useRef<boolean>(false); // Track if modal is already showing to prevent duplicates
     const lastTestIdRef = useRef<number | undefined>(undefined);
+    const lastDetectionRef = useRef<{ state: boolean | null; stepId: number | null }>({ state: null, stepId: null });
 
     // Keep currentPhase in sync with ref for event handlers
     useEffect(() => {
@@ -354,9 +355,20 @@ export function useMasterTest() {
 
         eventSource.addEventListener("detection", (e) => {
             const data = JSON.parse(e.data);
+            const stepId = data.test_step_id ?? null;
+            const detected = Boolean(data.detected);
+            const last = lastDetectionRef.current;
+
+            // Drop duplicate detection events for the same step and state
+            if (last.stepId === stepId && last.state === detected) {
+                return;
+            }
+            lastDetectionRef.current = { state: detected, stepId };
+
             addEvent("detection", data);
 
-            if (data.detected) {
+            // Only surface a toast on positive detection when state changes
+            if (detected) {
                 message.info("Detection event received", 1);
             }
         });
@@ -601,17 +613,38 @@ export function useMasterTest() {
      */
     const loadTestHistory = useCallback(async (test_id: number) => {
         try {
+            // Reset local caches before loading new test history to avoid showing stale boundary/compliance data
+            lastTestIdRef.current = test_id;
+            setBoundaryResults([]);
+            setTangentialResults([]);
+            setRadialResults([]);
+            setBoundaryDetectionCompleted(false);
+            setTangentialTestCompleted(false);
+            setRadialTestCompleted(false);
+            setAwaitingContinuation(false);
+            setPhaseProgress(null);
+
             // Load test details (including status)
             const testRes = await api.get(`/api/test/${test_id}`);
             if (testRes.data && testRes.data.status) {
                 setStatus(testRes.data.status);
                 console.log("[useMasterTest] Loaded test status from database:", testRes.data.status);
             }
-            lastTestIdRef.current = test_id;
 
             // Load test state
-            const stateRes = await api.get(`/api/test/${test_id}/state`);
-            if (stateRes.data) {
+            let stateRes: { data: any } | null = null;
+            try {
+                stateRes = await api.get(`/api/test/${test_id}/state`);
+            } catch (err: any) {
+                if (err?.response?.status === 404) {
+                    console.log(`[useMasterTest] No persisted state for test ${test_id} (404)`);
+                    stateRes = null;
+                } else {
+                    throw err;
+                }
+            }
+
+            if (stateRes?.data) {
                 // Determine actual current phase based on completion flags
                 const stateData = stateRes.data.state_data || {};
                 const boundaryComplete = stateRes.data.boundary_detection_completed || stateData.boundary_detection_completed || false;
@@ -746,6 +779,15 @@ export function useMasterTest() {
             }
         } catch (err: unknown) {
             console.error("Failed to load test history:", err);
+            // Ensure stale data isn't shown when history load fails
+            setBoundaryResults([]);
+            setTangentialResults([]);
+            setRadialResults([]);
+            setBoundaryDetectionCompleted(false);
+            setTangentialTestCompleted(false);
+            setRadialTestCompleted(false);
+            setAwaitingContinuation(false);
+            setPhaseProgress(null);
             message.warning("Some historical data could not be loaded");
         }
     }, []);
@@ -822,7 +864,26 @@ export function useMasterTest() {
             
             setIsRunning(res.data.is_running);
             setIsPaused(res.data.is_paused);
-            setTestState(res.data.state);
+            const stateFromServer = res.data.state;
+            const stateTestId = stateFromServer?.test_id;
+
+            // If the orchestrator holds state for a different test than the one we're viewing, ignore it to avoid bleeding old boundary data
+            // Also ignore if orchestrator has state but we haven't set an active test yet (fresh page load with a new test)
+            if (stateTestId && (!lastTestIdRef.current || stateTestId !== lastTestIdRef.current)) {
+                setTestState(null);
+                setCurrentPhase(null);
+                setBoundaryResults([]);
+                setTangentialResults([]);
+                setRadialResults([]);
+                setAwaitingContinuation(false);
+                setBoundaryDetectionCompleted(false);
+                setTangentialTestCompleted(false);
+                setRadialTestCompleted(false);
+                setPhaseProgress(null);
+                return;
+            }
+
+            setTestState(stateFromServer);
             if (res.data.state?.current_phase === 'COMPLETED') {
                 setStatus('COMPLETED');
             } else if (res.data.is_running) {
@@ -833,20 +894,20 @@ export function useMasterTest() {
                 setStatus('PLANNED');
             }
             
-            if (res.data.state) {
-                setCurrentPhase(res.data.state.current_phase);
-                setBoundaryResults(res.data.state.boundary_results);
-                // Set awaitingContinuation if EITHER flag is true
-                setAwaitingContinuation(
-                    res.data.state.awaiting_user_confirmation ||
-                    res.data.state.awaiting_test_selection ||
+        if (stateFromServer) {
+            setCurrentPhase(stateFromServer.current_phase);
+            setBoundaryResults(stateFromServer.boundary_results);
+            // Set awaitingContinuation if EITHER flag is true
+            setAwaitingContinuation(
+                    stateFromServer.awaiting_user_confirmation ||
+                    stateFromServer.awaiting_test_selection ||
                     false
-                );
+            );
 
                 // Also set phase completion flags
-                setBoundaryDetectionCompleted(res.data.state.boundary_detection_completed || false);
-                setTangentialTestCompleted(res.data.state.tangential_test_completed || false);
-                setRadialTestCompleted(res.data.state.radial_test_completed || false);
+                setBoundaryDetectionCompleted(stateFromServer.boundary_detection_completed || false);
+                setTangentialTestCompleted(stateFromServer.tangential_test_completed || false);
+                setRadialTestCompleted(stateFromServer.radial_test_completed || false);
             } else {
                 // Ensure we don't leak previous test state into a fresh session
                 setCurrentPhase(null);
@@ -859,7 +920,24 @@ export function useMasterTest() {
                 setRadialTestCompleted(false);
             }
         } catch (err: unknown) {
-            console.error("Failed to fetch state:", err);
+            const axiosError = err as { response?: { status?: number } };
+            if (axiosError?.response?.status === 404) {
+                // No orchestrator state yet for this test (new test) – clear local view
+                setIsRunning(false);
+                setIsPaused(false);
+                setTestState(null);
+                setCurrentPhase(null);
+                setBoundaryResults([]);
+                setTangentialResults([]);
+                setRadialResults([]);
+                setAwaitingContinuation(false);
+                setBoundaryDetectionCompleted(false);
+                setTangentialTestCompleted(false);
+                setRadialTestCompleted(false);
+                setStatus('PLANNED');
+            } else {
+                console.error("Failed to fetch state:", err);
+            }
         }
     }, []);
 
