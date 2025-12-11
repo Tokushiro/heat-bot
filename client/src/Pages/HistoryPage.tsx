@@ -1,9 +1,8 @@
 import { useNavigate } from "react-router-dom";
-import { Layout, Typography, Button, Space, Tag, Empty, message, Progress, Statistic, Row, Col, Divider } from "antd";
-import { LeftOutlined, PlayCircleOutlined, DownOutlined, CheckCircleOutlined, ClockCircleOutlined, EnvironmentOutlined, DownloadOutlined } from "@ant-design/icons";
+import { Layout, Typography, Button, Space, Tag, Empty, message, Progress, Statistic, Row, Col, Divider, Popconfirm, Card } from "antd";
+import { LeftOutlined, PlayCircleOutlined, DownOutlined, CheckCircleOutlined, ClockCircleOutlined, EnvironmentOutlined, DownloadOutlined, AimOutlined, CloseCircleOutlined } from "@ant-design/icons";
 import type { TestDB } from "../Components/testCard.tsx";
-import { useEffect, useState } from "react";
-import type {Test} from "../Types/test.ts";
+import { useEffect, useState, useCallback } from "react";
 import { api } from "../Components/apiAxios.ts";
 
 const { Header, Content } = Layout;
@@ -17,9 +16,13 @@ interface BoundaryResult {
 }
 
 interface TestWithState extends TestDB {
-    test_phase?: 'BOUNDARY_DETECTION' | 'COMPLIANCE_TEST' | 'COMPLETED';
+    test_phase?: 'BOUNDARY_DETECTION' | 'TANGENTIAL_TEST' | 'RADIAL_TEST' | 'COMPLIANCE_TEST' | 'COMPLETED';
     awaiting_confirmation?: boolean;
+    awaiting_test_selection?: boolean;
     boundary_results?: BoundaryResult[];
+    boundary_detection_completed?: boolean;
+    tangential_test_completed?: boolean;
+    radial_test_completed?: boolean;
     last_position_x?: number;
     last_position_y?: number;
     last_position_timestamp?: string;
@@ -67,14 +70,12 @@ export default function HistoryPage() {
     const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
     const [testSteps, setTestSteps] = useState<Record<number, TestStepSummary>>({});
 
-    useEffect(() => {
-        fetchTests();
-    }, []);
-
-    const fetchTests = async () => {
+    const fetchTests = useCallback(async (showLoading = true) => {
         try {
-            setLoading(true);
-            const res = await api.get<Test[]>(`/api/test`);
+            if (showLoading) {
+                setLoading(true);
+            }
+            const res = await api.get<TestDB[]>(`/api/test`);
 
             // Get test states and step summaries for each test
             const testsWithStates = await Promise.all(
@@ -92,7 +93,11 @@ export default function HistoryPage() {
                             status: test.status ?? 'PLANNED',
                             test_phase: stateRes.data?.current_phase,
                             awaiting_confirmation: stateRes.data?.awaiting_confirmation,
+                            awaiting_test_selection: stateRes.data?.awaiting_test_selection,
                             boundary_results: stateRes.data?.boundary_results ? JSON.parse(stateRes.data.boundary_results) : [],
+                            boundary_detection_completed: stateRes.data?.boundary_detection_completed,
+                            tangential_test_completed: stateRes.data?.tangential_test_completed,
+                            radial_test_completed: stateRes.data?.radial_test_completed,
                             last_position_x: stateRes.data?.last_position_x,
                             last_position_y: stateRes.data?.last_position_y,
                             last_position_timestamp: stateRes.data?.last_position_timestamp,
@@ -116,7 +121,18 @@ export default function HistoryPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
+
+    useEffect(() => {
+        fetchTests(true); // Show loading on initial fetch
+
+        // Auto-refresh every 3 seconds to keep history updated during test execution
+        const interval = setInterval(() => {
+            fetchTests(false); // Don't show loading on auto-refresh to avoid flickering
+        }, 3000);
+
+        return () => clearInterval(interval);
+    }, [fetchTests]);
 
     const fetchTestSteps = async (test_id: number) => {
         try {
@@ -157,9 +173,10 @@ export default function HistoryPage() {
             await api.delete(`/api/test/${testId}`);
             message.success("Test deleted successfully");
             setItems(prev => prev.filter(item => item.test_id !== testId));
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error("Error deleting test:", err);
-            message.error(err?.response?.data?.error ?? "Failed to delete test");
+            const axiosError = err as { response?: { data?: { error?: string } } };
+            message.error(axiosError?.response?.data?.error ?? "Failed to delete test");
         } finally {
             setDeleting(null);
         }
@@ -185,144 +202,36 @@ export default function HistoryPage() {
         }
 
         try {
-            message.loading({ content: 'Generating CSV...', key: 'export' });
+            message.loading({ content: 'Generating comprehensive IEC 63180 report...', key: 'export' });
 
-            // Fetch complete test data
-            const response = await api.get(`/api/test/${testId}/export`);
-            const data = response.data;
-
-            // Generate CSV content
-            const csv = generateCSV(data);
+            // Use the comprehensive IEC export endpoint which includes:
+            // - Overview section with metadata
+            // - Tangential Boundary section with 15% rule calculations
+            // - Radial section (if available)
+            // - Environmental data (temperature & humidity)
+            const response = await api.get(`/api/export/comprehensive/${testId}`, {
+                responseType: 'blob'
+            });
 
             // Download CSV file
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement('a');
             const url = URL.createObjectURL(blob);
 
             link.setAttribute('href', url);
-            link.setAttribute('download', `test_${testId}_${data.test.test_name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`);
+            link.setAttribute('download', `IEC63180_Test_${testId}_${new Date().toISOString().split('T')[0]}.csv`);
             link.style.visibility = 'hidden';
 
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+            URL.revokeObjectURL(url);
 
-            message.success({ content: 'CSV exported successfully', key: 'export' });
+            message.success({ content: 'IEC 63180 comprehensive report exported successfully', key: 'export' });
         } catch (err) {
             console.error("Error exporting CSV:", err);
             message.error({ content: 'Failed to export CSV', key: 'export' });
         }
-    };
-
-    const generateCSV = (data: any): string => {
-        const lines: string[] = [];
-        const { test, state, steps, summary } = data;
-
-        // Header
-        lines.push('"PIR SENSOR PERFORMANCE - BOUNDARY DETECTION TEST"');
-        lines.push('');
-
-        // Metadata Section
-        lines.push('"Test Information"');
-        lines.push(`"Standard","IEC 63180 Ed. 1"`);
-        lines.push(`"Test Lab","H.E.A.T. Bot Testing System"`);
-        lines.push(`"Test Method","Automated - Robot System"`);
-        lines.push(`"Test ID","${test.test_id}"`);
-        lines.push(`"Test Name","${test.test_name}"`);
-        lines.push(`"Sensor ID","${test.sensor_id}"`);
-        lines.push(`"Test Date","${new Date(test.test_date).toLocaleString()}"`);
-        lines.push(`"Test Status","${test.status}"`);
-        if (test.started_at) lines.push(`"Started At","${new Date(test.started_at).toLocaleString()}"`);
-        if (test.finished_at) lines.push(`"Finished At","${new Date(test.finished_at).toLocaleString()}"`);
-        lines.push('');
-
-        // Test Parameters
-        lines.push('"Test Parameters"');
-        lines.push(`"Movement Speed","0.5 m/s"`);
-        lines.push(`"Detection Wait Time","2 seconds"`);
-        lines.push(`"Repeat Measurements","2 attempts"`);
-        lines.push(`"Distance Range","1.0m - 8.0m"`);
-        lines.push(`"Distance Step","0.5m"`);
-        lines.push(`"Angle Increments","10° (36 angles total)"`);
-        lines.push('');
-
-        // Test Summary
-        lines.push('"Test Summary"');
-        if (summary) {
-            lines.push(`"Total Steps","${summary.total}"`);
-            lines.push(`"Completed","${summary.completed}"`);
-            lines.push(`"Running","${summary.running}"`);
-            lines.push(`"Pending","${summary.pending}"`);
-            lines.push(`"Errors","${summary.error}"`);
-            lines.push(`"Success Rate","${summary.total > 0 ? Math.round((summary.completed / summary.total) * 100) : 0}%"`);
-        }
-        lines.push('');
-
-        // Boundary Detection Results
-        if (state && state.boundary_results) {
-            const boundaryResults = JSON.parse(state.boundary_results);
-
-            lines.push('"BOUNDARY DETECTION RESULTS"');
-            lines.push('');
-            lines.push(`"Total Angles Tested","${boundaryResults.length}"`);
-            const detectedCount = boundaryResults.filter((r: any) => r.detection_boundary !== null).length;
-            lines.push(`"Angles with Detection","${detectedCount}"`);
-            lines.push(`"Detection Rate","${boundaryResults.length > 0 ? Math.round((detectedCount / boundaryResults.length) * 100) : 0}%"`);
-            lines.push('');
-
-            // Column headers
-            lines.push('"Angle (°)","Detected Distance (m)","No Detection Distance (m)","Detection Boundary (m)"');
-
-            // Data rows
-            boundaryResults.forEach((result: any) => {
-                lines.push(
-                    `"${result.angle}",` +
-                    `"${result.detected_distance !== null ? result.detected_distance.toFixed(2) : 'N/A'}",` +
-                    `"${result.no_detection_distance !== null ? result.no_detection_distance.toFixed(2) : 'N/A'}",` +
-                    `"${result.detection_boundary !== null ? result.detection_boundary.toFixed(2) : 'N/A'}"`
-                );
-            });
-            lines.push('');
-        }
-
-        // Detailed Test Steps
-        if (steps && steps.length > 0) {
-            lines.push('"DETAILED TEST STEPS"');
-            lines.push('');
-
-            // Column headers
-            lines.push(
-                '"Step ID","Sequence","Type","Angle (°)","Distance (m)","Status",' +
-                '"Detection 1","Detection 2","Detection Final",' +
-                '"Started At","Finished At"'
-            );
-
-            // Data rows
-            steps.forEach((step: any) => {
-                lines.push(
-                    `"${step.test_step_id}",` +
-                    `"${step.sequence_no}",` +
-                    `"${step.step_type}",` +
-                    `"${step.angle !== null ? step.angle : 'N/A'}",` +
-                    `"${step.distance_1 !== null ? step.distance_1.toFixed(2) : 'N/A'}",` +
-                    `"${step.status}",` +
-                    `"${step.detection_1 !== null ? (step.detection_1 ? 'YES' : 'NO') : 'N/A'}",` +
-                    `"${step.detection_2 !== null ? (step.detection_2 ? 'YES' : 'NO') : 'N/A'}",` +
-                    `"${step.detection_final !== null ? (step.detection_final ? 'YES' : 'NO') : 'N/A'}",` +
-                    `"${step.started_at ? new Date(step.started_at).toLocaleString() : 'N/A'}",` +
-                    `"${step.finished_at ? new Date(step.finished_at).toLocaleString() : 'N/A'}"`
-                );
-            });
-            lines.push('');
-        }
-
-        // Footer
-        lines.push('');
-        lines.push('"Generated by H.E.A.T. Bot Testing System"');
-        lines.push(`"Export Date","${new Date().toLocaleString()}"`);
-        lines.push('"Compliant with IEC 63180 Standard"');
-
-        return lines.join('\n');
     };
 
     const getStatusColor = (status: string) => {
@@ -352,6 +261,10 @@ export default function HistoryPage() {
                 return <Tag color="blue">Phase 1: Boundary Detection</Tag>;
             case 'COMPLIANCE_TEST':
                 return <Tag color="purple">Phase 2: Compliance Test</Tag>;
+            case 'TANGENTIAL_TEST':
+                return <Tag color="purple">Phase 2: Tangential Test</Tag>;
+            case 'RADIAL_TEST':
+                return <Tag color="purple">Phase 2: Radial Test</Tag>;
             case 'COMPLETED':
                 return <Tag color="green" icon={<CheckCircleOutlined />}>All Phases Complete</Tag>;
             default:
@@ -359,12 +272,118 @@ export default function HistoryPage() {
         }
     };
 
+    const getIndividualPhaseStatus = (phaseCompleted?: boolean, awaiting?: boolean, currentPhase?: string, phaseName?: string, testStatus?: string) => {
+        if (phaseCompleted) {
+            return { color: 'green', icon: <CheckCircleOutlined />, text: 'Finished' };
+        } else if (awaiting && currentPhase === phaseName) {
+            return { color: 'gold', icon: <ClockCircleOutlined />, text: 'Awaiting Selection' };
+        } else if (currentPhase === phaseName && testStatus === 'IN_PROGRESS') {
+            return { color: 'blue', icon: <ClockCircleOutlined />, text: 'In Progress' };
+        } else if (currentPhase === phaseName && testStatus === 'PAUSED') {
+            return { color: 'orange', icon: <ClockCircleOutlined />, text: 'Paused' };
+        } else if (currentPhase === phaseName && testStatus === 'ERROR') {
+            return { color: 'red', icon: null, text: 'Error' };
+        } else if (currentPhase === phaseName) {
+            return { color: 'orange', icon: <ClockCircleOutlined />, text: 'Waiting to Resume' };
+        } else {
+            return { color: 'default', icon: null, text: 'Pending' };
+        }
+    };
+
     const renderExpandedContent = (item: TestWithState) => {
         const steps = testSteps[item.test_id!];
         const hasPosition = item.last_position_x !== undefined && item.last_position_y !== undefined;
 
+        // Get status for each phase
+        const boundaryStatus = getIndividualPhaseStatus(
+            item.boundary_detection_completed,
+            item.awaiting_test_selection,
+            item.test_phase,
+            'BOUNDARY_DETECTION',
+            item.status
+        );
+        const tangentialStatus = getIndividualPhaseStatus(
+            item.tangential_test_completed,
+            item.awaiting_test_selection,
+            item.test_phase,
+            'TANGENTIAL_TEST',
+            item.status
+        );
+        const radialStatus = getIndividualPhaseStatus(
+            item.radial_test_completed,
+            item.awaiting_test_selection,
+            item.test_phase,
+            'RADIAL_TEST',
+            item.status
+        );
+
         return (
             <div style={{ padding: '16px 0' }}>
+                {/* Phase Status */}
+                <div style={{ marginBottom: 24 }}>
+                    <Text strong style={{ fontSize: 16, marginBottom: 12, display: 'block', color: '#1890ff' }}>
+                        Test Phases
+                    </Text>
+                    <Row gutter={[12, 12]}>
+                        <Col xs={24} sm={8}>
+                            <div style={{
+                                background: boundaryStatus.color === 'green' ? '#f6ffed' : '#fafafa',
+                                padding: '16px',
+                                borderRadius: 8,
+                                border: `2px solid ${boundaryStatus.color === 'green' ? '#52c41a' : boundaryStatus.color === 'blue' ? '#1890ff' : '#d9d9d9'}`,
+                                transition: 'all 0.3s',
+                                boxShadow: boundaryStatus.color === 'green' || boundaryStatus.color === 'blue' ? '0 2px 8px rgba(0,0,0,0.1)' : 'none'
+                            }}>
+                                <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                                    <Text type="secondary" style={{ fontSize: 12 }}>Phase 1</Text>
+                                    <Text strong style={{ fontSize: 14 }}>Boundary Detection</Text>
+                                    <Tag color={boundaryStatus.color} icon={boundaryStatus.icon} style={{ marginTop: 4 }}>
+                                        {boundaryStatus.text}
+                                    </Tag>
+                                </Space>
+                            </div>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                            <div style={{
+                                background: tangentialStatus.color === 'green' ? '#f6ffed' : '#fafafa',
+                                padding: '16px',
+                                borderRadius: 8,
+                                border: `2px solid ${tangentialStatus.color === 'green' ? '#52c41a' : tangentialStatus.color === 'blue' ? '#1890ff' : '#d9d9d9'}`,
+                                transition: 'all 0.3s',
+                                boxShadow: tangentialStatus.color === 'green' || tangentialStatus.color === 'blue' ? '0 2px 8px rgba(0,0,0,0.1)' : 'none'
+                            }}>
+                                <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                                    <Text type="secondary" style={{ fontSize: 12 }}>Phase 2A</Text>
+                                    <Text strong style={{ fontSize: 14 }}>Tangential Test</Text>
+                                    <Tag color={tangentialStatus.color} icon={tangentialStatus.icon} style={{ marginTop: 4 }}>
+                                        {tangentialStatus.text}
+                                    </Tag>
+                                </Space>
+                            </div>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                            <div style={{
+                                background: radialStatus.color === 'green' ? '#f6ffed' : '#fafafa',
+                                padding: '16px',
+                                borderRadius: 8,
+                                border: `2px solid ${radialStatus.color === 'green' ? '#52c41a' : radialStatus.color === 'blue' ? '#1890ff' : '#d9d9d9'}`,
+                                transition: 'all 0.3s',
+                                boxShadow: radialStatus.color === 'green' || radialStatus.color === 'blue' ? '0 2px 8px rgba(0,0,0,0.1)' : 'none'
+                            }}>
+                                <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                                    <Text type="secondary" style={{ fontSize: 12 }}>Phase 2B</Text>
+                                    <Text strong style={{ fontSize: 14 }}>Radial Test</Text>
+                                    <Tag color={radialStatus.color} icon={radialStatus.icon} style={{ marginTop: 4 }}>
+                                        {radialStatus.text}
+                                    </Tag>
+                                </Space>
+                            </div>
+                        </Col>
+                    </Row>
+                </div>
+
+                <Divider />
+
                 {/* Progress Summary */}
                 <Row gutter={16} style={{ marginBottom: 16 }}>
                     <Col span={6}>
@@ -406,7 +425,9 @@ export default function HistoryPage() {
                 {/* Progress Bar */}
                 {steps && steps.total > 0 && (
                     <div style={{ marginBottom: 16 }}>
-                        <Text strong>Test Progress:</Text>
+                        <Text strong style={{ fontSize: 16, display: 'block', marginBottom: 12 }}>
+                            Test Progress
+                        </Text>
                         <Progress
                             percent={Math.round((steps.completed / steps.total) * 100)}
                             status={item.status === 'ERROR' ? 'exception' : item.status === 'COMPLETED' ? 'success' : 'active'}
@@ -414,27 +435,36 @@ export default function HistoryPage() {
                                 '0%': '#108ee9',
                                 '100%': '#87d068',
                             }}
+                            style={{ marginBottom: 12 }}
                         />
-                        <Space size="large" style={{ marginTop: 8 }}>
-                            <Text type="success">
-                                <CheckCircleOutlined /> Completed: {steps.completed}
-                            </Text>
-                            {steps.running > 0 && (
-                                <Text type="warning">
-                                    <ClockCircleOutlined /> Running: {steps.running}
+                        <Row gutter={[12, 8]}>
+                            <Col xs={12} sm={6}>
+                                <Text type="success">
+                                    <CheckCircleOutlined /> Completed: {steps.completed}
                                 </Text>
+                            </Col>
+                            {steps.running > 0 && (
+                                <Col xs={12} sm={6}>
+                                    <Text type="warning">
+                                        <ClockCircleOutlined /> Running: {steps.running}
+                                    </Text>
+                                </Col>
                             )}
                             {steps.error > 0 && (
-                                <Text type="danger">
-                                    ⚠️ Errors: {steps.error}
-                                </Text>
+                                <Col xs={12} sm={6}>
+                                    <Text type="danger">
+                                        ⚠️ Errors: {steps.error}
+                                    </Text>
+                                </Col>
                             )}
                             {steps.pending > 0 && (
-                                <Text type="secondary">
-                                    Pending: {steps.pending}
-                                </Text>
+                                <Col xs={12} sm={6}>
+                                    <Text type="secondary">
+                                        Pending: {steps.pending}
+                                    </Text>
+                                </Col>
                             )}
-                        </Space>
+                        </Row>
                     </div>
                 )}
 
@@ -443,34 +473,97 @@ export default function HistoryPage() {
                 {/* Boundary Results */}
                 {item.boundary_results && item.boundary_results.length > 0 && (
                     <div style={{ marginBottom: 16 }}>
-                        <Text strong>
-                            Detected Boundaries ({item.boundary_results.filter((r: BoundaryResult) => r.detection_boundary !== null).length}/{item.boundary_results.length} angles)
+                        <Text strong style={{ fontSize: 16, display: 'block', marginBottom: 12 }}>
+                            <AimOutlined /> Boundary Detection Results
                         </Text>
-                        <div style={{ maxHeight: '300px', overflow: 'auto', marginTop: 8 }}>
-                            <Row gutter={[6, 6]}>
-                                {item.boundary_results.map((result: BoundaryResult) => (
-                                    <Col span={4} key={result.angle}>
-                                        <div style={{
-                                            background: result.detection_boundary ? '#f6ffed' : '#fff2e8',
-                                            border: result.detection_boundary ? '1px solid #b7eb8f' : '1px solid #ffd591',
-                                            padding: '6px',
-                                            borderRadius: 4,
-                                            textAlign: 'center'
-                                        }}>
-                                            <Text strong style={{ fontSize: 12 }}>{result.angle}°</Text>
-                                            <br />
-                                            <Text style={{ fontSize: 14, color: result.detection_boundary ? '#52c41a' : '#999' }}>
-                                                {result.detection_boundary ? `${result.detection_boundary.toFixed(2)}m` : 'N/A'}
-                                            </Text>
-                                            {result.detection_boundary && (
-                                                <div>
-                                                    <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 10 }} />
+
+                        {/* Summary Statistics */}
+                        <Row gutter={12} style={{ marginBottom: 16 }}>
+                            <Col xs={24} sm={8}>
+                                <Card size="small" style={{ background: '#f6ffed', border: '1px solid #b7eb8f' }}>
+                                    <Statistic
+                                        title="Detected"
+                                        value={item.boundary_results.filter((r: BoundaryResult) => r.detection_boundary !== null).length}
+                                        suffix={`/ ${item.boundary_results.length}`}
+                                        prefix={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
+                                        valueStyle={{ color: '#52c41a', fontSize: 20 }}
+                                    />
+                                </Card>
+                            </Col>
+                            <Col xs={24} sm={8}>
+                                <Card size="small" style={{ background: '#fff7e6', border: '1px solid #ffd591' }}>
+                                    <Statistic
+                                        title="Not Detected"
+                                        value={item.boundary_results.filter((r: BoundaryResult) => r.detection_boundary === null).length}
+                                        suffix={`/ ${item.boundary_results.length}`}
+                                        prefix={<CloseCircleOutlined style={{ color: '#faad14' }} />}
+                                        valueStyle={{ color: '#faad14', fontSize: 20 }}
+                                    />
+                                </Card>
+                            </Col>
+                            <Col xs={24} sm={8}>
+                                <Card size="small" style={{ background: '#e6f7ff', border: '1px solid #91d5ff' }}>
+                                    <Statistic
+                                        title="Avg. Distance"
+                                        value={(() => {
+                                            const detected = item.boundary_results.filter((r: BoundaryResult) => r.detection_boundary !== null);
+                                            if (detected.length === 0) return 0;
+                                            const sum = detected.reduce((acc: number, r: BoundaryResult) => acc + (r.detection_boundary || 0), 0);
+                                            return (sum / detected.length).toFixed(2);
+                                        })()}
+                                        suffix="m"
+                                        prefix={<EnvironmentOutlined style={{ color: '#1890ff' }} />}
+                                        valueStyle={{ color: '#1890ff', fontSize: 20 }}
+                                    />
+                                </Card>
+                            </Col>
+                        </Row>
+
+                        {/* Boundary Grid */}
+                        <div style={{
+                            background: '#fafafa',
+                            padding: '12px',
+                            borderRadius: 8,
+                            border: '1px solid #d9d9d9'
+                        }}>
+                            <div style={{ maxHeight: '300px', overflow: 'auto' }}>
+                                <Row gutter={[8, 8]}>
+                                    {item.boundary_results.map((result: BoundaryResult) => (
+                                        <Col xs={12} sm={8} md={6} lg={4} key={result.angle}>
+                                            <div style={{
+                                                background: result.detection_boundary ? '#f6ffed' : '#fff2e8',
+                                                border: result.detection_boundary ? '2px solid #52c41a' : '2px solid #ffd591',
+                                                padding: '10px',
+                                                borderRadius: 6,
+                                                textAlign: 'center',
+                                                transition: 'all 0.3s',
+                                                boxShadow: result.detection_boundary ? '0 2px 4px rgba(82, 196, 26, 0.2)' : '0 2px 4px rgba(255, 173, 20, 0.2)',
+                                                cursor: 'default'
+                                            }}>
+                                                <div style={{ marginBottom: 4 }}>
+                                                    <Text strong style={{ fontSize: 13, color: '#262626' }}>
+                                                        {result.angle}°
+                                                    </Text>
                                                 </div>
-                                            )}
-                                        </div>
-                                    </Col>
-                                ))}
-                            </Row>
+                                                <div style={{ marginBottom: 4 }}>
+                                                    <Text style={{
+                                                        fontSize: 16,
+                                                        fontWeight: 600,
+                                                        color: result.detection_boundary ? '#52c41a' : '#999'
+                                                    }}>
+                                                        {result.detection_boundary ? `${result.detection_boundary.toFixed(2)}m` : 'N/A'}
+                                                    </Text>
+                                                </div>
+                                                {result.detection_boundary ? (
+                                                    <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 14 }} />
+                                                ) : (
+                                                    <CloseCircleOutlined style={{ color: '#faad14', fontSize: 14 }} />
+                                                )}
+                                            </div>
+                                        </Col>
+                                    ))}
+                                </Row>
+                            </div>
                         </div>
                     </div>
                 )}
@@ -478,40 +571,40 @@ export default function HistoryPage() {
                 {/* Last Position */}
                 {hasPosition && (
                     <div style={{ marginBottom: 16 }}>
-                        <Text strong>
-                            <EnvironmentOutlined /> Last Robot Position:
+                        <Text strong style={{ fontSize: 16, display: 'block', marginBottom: 12 }}>
+                            <EnvironmentOutlined /> Last Robot Position
                         </Text>
                         <div style={{
                             background: '#e6f7ff',
-                            padding: '12px',
-                            borderRadius: 4,
-                            marginTop: 8,
-                            border: '1px solid #91d5ff'
+                            padding: '16px',
+                            borderRadius: 8,
+                            border: '1px solid #91d5ff',
+                            boxShadow: '0 2px 4px rgba(24, 144, 255, 0.1)'
                         }}>
-                            <Row gutter={16}>
-                                <Col span={8}>
+                            <Row gutter={[16, 16]}>
+                                <Col xs={24} sm={8}>
                                     <Statistic
                                         title="X Coordinate"
                                         value={item.last_position_x}
                                         suffix="m"
                                         precision={2}
-                                        valueStyle={{ fontSize: 16 }}
+                                        valueStyle={{ fontSize: 18, color: '#1890ff' }}
                                     />
                                 </Col>
-                                <Col span={8}>
+                                <Col xs={24} sm={8}>
                                     <Statistic
                                         title="Y Coordinate"
                                         value={item.last_position_y}
                                         suffix="m"
                                         precision={2}
-                                        valueStyle={{ fontSize: 16 }}
+                                        valueStyle={{ fontSize: 18, color: '#1890ff' }}
                                     />
                                 </Col>
-                                <Col span={8}>
+                                <Col xs={24} sm={8}>
                                     <Statistic
                                         title="Last Updated"
                                         value={item.last_position_timestamp ? formatRelativeTime(item.last_position_timestamp) : 'Unknown'}
-                                        valueStyle={{ fontSize: 14 }}
+                                        valueStyle={{ fontSize: 16 }}
                                     />
                                 </Col>
                             </Row>
@@ -545,20 +638,41 @@ export default function HistoryPage() {
 
                 {/* Test Details */}
                 <Divider />
-                <Row gutter={16}>
-                    <Col span={12}>
-                        <Text type="secondary">Test ID:</Text> <Text>{item.test_id}</Text>
-                    </Col>
-                    <Col span={12}>
-                        <Text type="secondary">Sensor ID:</Text> <Text>{item.sensor_id}</Text>
-                    </Col>
-                    <Col span={12}>
-                        <Text type="secondary">Created:</Text> <Text>{formatDate(item.test_date)}</Text>
-                    </Col>
-                    <Col span={12}>
-                        <Text type="secondary">Status:</Text> <Tag color={getStatusColor(item.status ?? 'PLANNED')}>{item.status ?? 'PLANNED'}</Tag>
-                    </Col>
-                </Row>
+                <div style={{
+                    background: '#fafafa',
+                    padding: '16px',
+                    borderRadius: 8,
+                    border: '1px solid #d9d9d9'
+                }}>
+                    <Row gutter={[16, 12]}>
+                        <Col xs={24} sm={12}>
+                            <Space direction="vertical" size={0}>
+                                <Text type="secondary" style={{ fontSize: 12 }}>Test ID</Text>
+                                <Text strong style={{ fontSize: 14 }}>{item.test_id}</Text>
+                            </Space>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                            <Space direction="vertical" size={0}>
+                                <Text type="secondary" style={{ fontSize: 12 }}>Sensor ID</Text>
+                                <Text strong style={{ fontSize: 14 }}>{item.sensor_id}</Text>
+                            </Space>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                            <Space direction="vertical" size={0}>
+                                <Text type="secondary" style={{ fontSize: 12 }}>Created</Text>
+                                <Text strong style={{ fontSize: 14 }}>{formatDate(item.test_date)}</Text>
+                            </Space>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                            <Space direction="vertical" size={0}>
+                                <Text type="secondary" style={{ fontSize: 12 }}>Status</Text>
+                                <Tag color={getStatusColor(item.status ?? 'PLANNED')} style={{ marginTop: 4 }}>
+                                    {item.status ?? 'PLANNED'}
+                                </Tag>
+                            </Space>
+                        </Col>
+                    </Row>
+                </div>
             </div>
         );
     };
@@ -703,13 +817,23 @@ export default function HistoryPage() {
                                                         >
                                                             Export CSV
                                                         </Button>
-                                                        <Button
-                                                            danger
-                                                            onClick={() => handleDelete(item.test_id)}
-                                                            loading={deleting === item.test_id}
+                                                        <Popconfirm
+                                                            title="Delete this test?"
+                                                            description="This will permanently delete the test and all associated data. This action cannot be undone."
+                                                            okText="Delete"
+                                                            cancelText="Cancel"
+                                                            okButtonProps={{ danger: true, loading: deleting === item.test_id }}
+                                                            onConfirm={() => handleDelete(item.test_id)}
+                                                            disabled={deleting === item.test_id}
                                                         >
-                                                            Delete
-                                                        </Button>
+                                                            <Button
+                                                                danger
+                                                                loading={deleting === item.test_id}
+                                                                disabled={deleting === item.test_id}
+                                                            >
+                                                                Delete
+                                                            </Button>
+                                                        </Popconfirm>
                                                     </Space>
                                                 </div>
                                             </div>

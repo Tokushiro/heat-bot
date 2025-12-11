@@ -13,5 +13,6 @@ router.delete('/:testId', removeTest);
 router.get('/:testId/steps/summary', testStateController.getTestStepSummary);
 router.get('/:testId/state', testStateController.getTestState);
 router.get('/:testId/steps', testStateController.getTestSteps);
+router.get('/:testId/compliance-results', testStateController.getComplianceResults);
 
 export default router;

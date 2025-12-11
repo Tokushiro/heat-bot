@@ -1,6 +1,7 @@
 import { IRobotAPI } from "../interfaces/IRobotAPI";
 import { RobotAPI } from "../implementations/real/RealRobotAPI";
 import { MockRobotAPI } from "../implementations/mock/MockRobotAPI";
+import { emitRobotEvent } from "../../services/telemetry/RobotEventBus";
 
 /**
  * Factory for creating Robot API instances
@@ -8,6 +9,7 @@ import { MockRobotAPI } from "../implementations/mock/MockRobotAPI";
  */
 export class RobotAPIFactory {
     private static _instance: IRobotAPI | null = null;
+    private static listenersAttached = false;
 
     /**
      * Get singleton instance of Robot API (either real or mock)
@@ -17,7 +19,8 @@ export class RobotAPIFactory {
      */
     static getInstance(): IRobotAPI {
         if (!this._instance) {
-            const useMock = process.env.USE_MOCK_ROBOT === "true";
+            // Default to mock unless explicitly disabled
+            const useMock = process.env.USE_MOCK_ROBOT !== "false";
 
             if (useMock) {
                 console.log("=".repeat(60));
@@ -34,9 +37,27 @@ export class RobotAPIFactory {
                 console.log("=".repeat(60));
                 this._instance = RobotAPI.instance;
             }
+
+            this.attachRobotEventForwarders(this._instance);
         }
 
         return this._instance;
+    }
+
+    /**
+     * Forward low-level robot events to the robot event bus once.
+     */
+    private static attachRobotEventForwarders(api: IRobotAPI) {
+        if (this.listenersAttached) return;
+
+        api.on("movement_started", (payload) => emitRobotEvent("movement_started", payload));
+        api.on("movement_completed", (payload) => emitRobotEvent("movement_completed", payload));
+        api.on("movement_failed", (payload) => emitRobotEvent("movement_failed", payload));
+        api.on("movement_stopped", (payload) => emitRobotEvent("movement_stopped", payload));
+        api.on("initialized", (payload) => emitRobotEvent("robot_initialized", payload));
+        api.on("error", (payload) => emitRobotEvent("robot_error", payload));
+
+        this.listenersAttached = true;
     }
 
     /**
@@ -44,6 +65,7 @@ export class RobotAPIFactory {
      */
     static reset(): void {
         this._instance = null;
+        this.listenersAttached = false;
     }
 
     /**

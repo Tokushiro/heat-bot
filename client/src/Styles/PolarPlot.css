@@ -1,0 +1,193 @@
+/* Polar Plot Component Styles */
+
+.polar-plot {
+    background-color: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Header */
+.polar-plot-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.polar-plot-header h3 {
+    margin: 0;
+    color: #333;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+/* Legend */
+.polar-plot-legend {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #666;
+}
+
+.legend-marker {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+}
+
+.legend-marker.detected {
+    background-color: #4caf50;
+    border-color: #2e7d32;
+}
+
+.legend-marker.not-detected {
+    background-color: #f44336;
+    border-color: #c62828;
+}
+
+.legend-marker.ideal-boundary {
+    width: 30px;
+    height: 0;
+    border-radius: 0;
+    border: none;
+    border-top: 2px dashed #4caf50;
+}
+
+/* Canvas Container */
+.polar-plot-canvas-container {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.polar-plot-canvas {
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    cursor: crosshair;
+}
+
+/* Tooltip */
+.polar-plot-tooltip {
+    position: absolute;
+    background-color: rgba(0, 0, 0, 0.85);
+    color: white;
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    pointer-events: none;
+    z-index: 1000;
+    min-width: 150px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.tooltip-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 4px;
+}
+
+.tooltip-row:last-child {
+    margin-bottom: 0;
+}
+
+.tooltip-label {
+    color: #bbb;
+    font-weight: 500;
+}
+
+.tooltip-value {
+    color: white;
+    font-weight: 600;
+}
+
+.tooltip-value.detected {
+    color: #4caf50;
+}
+
+.tooltip-value.not-detected {
+    color: #f44336;
+}
+
+/* Statistics */
+.polar-plot-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 15px;
+    padding-top: 15px;
+    border-top: 2px solid #e0e0e0;
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 10px;
+    background-color: #f9f9f9;
+    border-radius: 4px;
+}
+
+.stat-label {
+    color: #666;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.stat-value {
+    color: #333;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .polar-plot-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .polar-plot-canvas {
+        max-width: 100%;
+        height: auto;
+    }
+
+    .polar-plot-stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .polar-plot-tooltip {
+        font-size: 11px;
+        min-width: 130px;
+        padding: 8px 10px;
+    }
+}
+
+@media (max-width: 480px) {
+    .polar-plot {
+        padding: 15px;
+    }
+
+    .polar-plot-header h3 {
+        font-size: 18px;
+    }
+
+    .polar-plot-stats {
+        grid-template-columns: 1fr;
+    }
+}

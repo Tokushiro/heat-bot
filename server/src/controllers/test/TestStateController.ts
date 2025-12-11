@@ -118,3 +118,31 @@ export async function exportTestData(req: Request, res: Response) {
         });
     }
 }
+
+/**
+ * Get compliance test results (tangential or radial)
+ * Query param: type = 'TANGENTIAL' | 'RADIAL'
+ */
+export async function getComplianceResults(req: Request, res: Response) {
+    try {
+        const testId = parseInt(req.params.testId);
+        const testType = req.query.type as 'TANGENTIAL' | 'RADIAL' | undefined;
+
+        if (isNaN(testId)) {
+            return res.status(400).json({ error: "Invalid testId" });
+        }
+
+        if (!testType || (testType !== 'TANGENTIAL' && testType !== 'RADIAL')) {
+            return res.status(400).json({ error: "Invalid or missing test type. Use ?type=TANGENTIAL or ?type=RADIAL" });
+        }
+
+        const results = await testStateService.getComplianceResults(testId, testType);
+        return res.status(200).json(results);
+
+    } catch (error: any) {
+        console.error("Error fetching compliance results:", error);
+        return res.status(500).json({
+            error: error.message || "Failed to fetch compliance results"
+        });
+    }
+}

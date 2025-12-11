@@ -69,7 +69,7 @@ export default function TestCard({ test, onContinue, onDelete, isDeleting = fals
                 opacity: isDeleting ? 0.6 : 1,
                 transition: "opacity 0.3s"
             }}
-            bodyStyle={{ padding: 20 }}
+            styles={{ body: { padding: 20 } }}
         >
             <Row align="middle" gutter={[16, 12]}>
                 {/* Left: name + meta */}

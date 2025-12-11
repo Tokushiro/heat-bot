@@ -1,9 +1,9 @@
 import { EventEmitter } from "events";
-import { Position } from "../../api/implementations/real/RealRobotAPI";
 import { RobotAPIFactory } from "../../api/factories/RobotAPIFactory";
 import { SensorAPIFactory } from "../../api/factories/SensorAPIFactory";
 import { RobotSensorIntegration } from "../../api/implementations/mock/RobotSensorIntegration";
 import bleEventBus, { DetectionEvent } from "../core/BleEventBus";
+import { TelemetryService } from "../telemetry/TelemetryService";
 import * as testService from "./TestService";
 import * as testStepService from "./TestStepService";
 import pool from "../../db_conn";
@@ -104,6 +104,20 @@ export class MasterTestOrchestrator extends EventEmitter {
                     detected: event.detected,
                     timestamp: event.timestamp 
                 });
+
+                // Broadcast telemetry snapshot with detection status
+                if (this.testState) {
+                    TelemetryService.recordSample({
+                        test_id: this.testState.test_id,
+                        test_step_id: this.currentStepId,
+                        detection_active: event.detected,
+                        robot_position_x: this.testState.last_position_x,
+                        robot_position_y: this.testState.last_position_y,
+                        timestamp: new Date(event.timestamp)
+                    }).catch(err => {
+                        console.warn("[MasterTest] Failed to record detection telemetry:", err);
+                    });
+                }
             }
         });
     }
@@ -168,12 +182,13 @@ export class MasterTestOrchestrator extends EventEmitter {
             return false;
 
         } finally {
-            if (!this.testState?.awaiting_user_confirmation) {
+            // Keep state if awaiting user confirmation OR test selection
+            if (!this.testState?.awaiting_user_confirmation && !this.testState?.awaiting_test_selection) {
                 console.log("[MasterTest] 🏁 Test finished - Clearing running state");
                 this.isRunning = false;
                 this.currentTest = null;
             } else {
-                console.log("[MasterTest] ⏸️ Test paused - Awaiting user confirmation");
+                console.log("[MasterTest] ⏸️ Test paused - Awaiting user input");
             }
         }
     }
@@ -557,7 +572,9 @@ export class MasterTestOrchestrator extends EventEmitter {
                 if (this.isPaused) await this.waitForResume();
                 this.ensureNotStopped();
 
-                const testDistance = boundary.detection_boundary + offsetDistance;
+                // Subtract offset to test INSIDE the boundary (closer to sensor)
+                // E.g., if boundary is 8m and offset is 2m, test at 6m (not 10m!)
+                const testDistance = boundary.detection_boundary - offsetDistance;
 
                 const alreadyCompleted = completedMeasurements.some(
                     m => m.angle === boundary.angle && 
@@ -753,7 +770,9 @@ export class MasterTestOrchestrator extends EventEmitter {
                 if (this.isPaused) await this.waitForResume();
                 this.ensureNotStopped();
 
-                const testDistance = boundary.detection_boundary + offsetDistance;
+                // Subtract offset to test INSIDE the boundary (closer to sensor)
+                // E.g., if boundary is 8m and offset is 2m, test at 6m (not 10m!)
+                const testDistance = boundary.detection_boundary - offsetDistance;
 
                 await this.performComplianceMeasurement(
                     config.test_id,
@@ -806,7 +825,7 @@ export class MasterTestOrchestrator extends EventEmitter {
                 if (this.isPaused) await this.waitForResume();
                 this.ensureNotStopped();
 
-                await this.testPositionWithRepeats(
+                const detected = await this.testPositionWithRepeats(
                     config.test_id,
                     'COMPLIANCE_TANGENTIAL',
                     angle,
@@ -815,6 +834,14 @@ export class MasterTestOrchestrator extends EventEmitter {
                     config.detection_wait_time || 2000,
                     config.repeat_measurements || 2
                 );
+
+                // Emit compliance measurement event for client to track results
+                this.emit("compliance_measurement_completed", {
+                    test_id: config.test_id,
+                    angle,
+                    distance: testDistance,
+                    detected
+                });
 
                 completedCount++;
                 this.testState!.completed_step_count++;
@@ -858,7 +885,9 @@ export class MasterTestOrchestrator extends EventEmitter {
                 if (this.isPaused) await this.waitForResume();
                 this.ensureNotStopped();
 
-                const testDistance = boundary.detection_boundary + offsetDistance;
+                // Subtract offset to test INSIDE the boundary (closer to sensor)
+                // E.g., if boundary is 8m and offset is 2m, test at 6m (not 10m!)
+                const testDistance = boundary.detection_boundary - offsetDistance;
 
                 await this.performComplianceMeasurement(
                     config.test_id,
@@ -938,7 +967,7 @@ export class MasterTestOrchestrator extends EventEmitter {
             if (this.isPaused) await this.waitForResume();
             this.ensureNotStopped();
 
-            await this.testPositionWithRepeats(
+            const detected = await this.testPositionWithRepeats(
                 test_id,
                 'COMPLIANCE_TANGENTIAL',
                 angle,
@@ -947,6 +976,14 @@ export class MasterTestOrchestrator extends EventEmitter {
                 waitTime,
                 repeatCount
             );
+
+            // Emit compliance measurement event for client to track results
+            this.emit("compliance_measurement_completed", {
+                test_id,
+                angle,
+                distance: radius,
+                detected
+            });
         }
     }
 
@@ -1069,6 +1106,18 @@ export class MasterTestOrchestrator extends EventEmitter {
                     x: position.x,
                     y: position.y
                 });
+
+                // Record lightweight telemetry snapshot for live dashboards
+                try {
+                    await TelemetryService.recordSample({
+                        test_id: this.testState.test_id,
+                        robot_position_x: position.x,
+                        robot_position_y: position.y,
+                        timestamp: new Date()
+                    });
+                } catch (telemetryErr) {
+                    console.warn("[MasterTest] Failed to record telemetry position:", telemetryErr);
+                }
             }
         } catch (error) {
             console.warn(`[MasterTest] Failed to get robot position:`, error);
@@ -1085,9 +1134,19 @@ export class MasterTestOrchestrator extends EventEmitter {
             throw new Error("No test in progress");
         }
 
-        if (!this.testState.awaiting_test_selection) {
+        // Allow start even if awaiting flag isn't set, as long as boundary is done and this phase not completed
+        const needsPhase =
+            this.testState.boundary_detection_completed &&
+            (testType === 'TANGENTIAL' ? !this.testState.tangential_test_completed : !this.testState.radial_test_completed);
+
+        if (!this.testState.awaiting_test_selection && !needsPhase) {
             throw new Error("Not awaiting test selection");
         }
+
+        // If we are resuming after a stop, make sure running flags are set
+        this.isRunning = true;
+        this.isPaused = false;
+        this.stopRequested = false;
 
         const phase: TestPhase = testType === 'TANGENTIAL' ? 'TANGENTIAL_TEST' : 'RADIAL_TEST';
         const testName = testType === 'TANGENTIAL' ? 'Tangential' : 'Radial';
@@ -1096,11 +1155,11 @@ export class MasterTestOrchestrator extends EventEmitter {
             this.isRunning = true;
             this.isPaused = false;
             this.stopRequested = false;
-            this.testState.awaiting_test_selection = false;
-            this.testState.awaiting_user_confirmation = false;
-            this.testState.current_phase = phase;
-            this.testState.progress.phase = phase;
-            this.testState.progress.total_steps = this.calculateTotalSteps(this.currentTest, phase);
+        this.testState.awaiting_test_selection = false;
+        this.testState.awaiting_user_confirmation = false;
+        this.testState.current_phase = phase;
+        this.testState.progress.phase = phase;
+        this.testState.progress.total_steps = this.calculateTotalSteps(this.currentTest, phase);
             this.testState.progress.completed_steps = 0;
             this.testState.progress.current_step = 0;
             await this.saveTestState();
@@ -1183,12 +1242,15 @@ export class MasterTestOrchestrator extends EventEmitter {
             return false;
 
         } finally {
-            if (!this.testState?.awaiting_test_selection) {
+            // Keep state and config if awaiting test selection
+            if (!this.testState?.awaiting_test_selection && !this.testState?.awaiting_user_confirmation) {
                 this.isRunning = false;
                 this.currentTest = null;
                 this.testState = null;
             } else {
                 this.isRunning = false;
+                // Keep currentTest and testState for next phase
+                console.log("[MasterTest] ⏸️ Keeping test state for next phase");
             }
         }
     }
@@ -1301,18 +1363,61 @@ export class MasterTestOrchestrator extends EventEmitter {
         this.stopRequested = true;
         await RobotAPIFactory.getInstance().stopMovement();
 
-        if (this.currentTest) {
+        let awaitingTestSelection = false;
+        let keepStateForRestart = false;
+        if (this.currentTest && this.testState) {
             // Save position before stopping
             await this.updateRobotPosition();
+
+            // Determine what buttons to show based on current phase and completion status
+            if (this.testState.current_phase === 'BOUNDARY_DETECTION' && this.testState.boundary_detection_completed) {
+                // Boundary complete but stopped before choosing next test
+                this.testState.awaiting_test_selection = true;
+                awaitingTestSelection = true;
+                keepStateForRestart = true;
+                console.log(`[MasterTest] Test stopped after boundary detection, showing tangential/radial options`);
+            } else if (this.testState.current_phase === 'TANGENTIAL_TEST' || this.testState.current_phase === 'RADIAL_TEST') {
+                // Stopped during tangential or radial test - allow restart of that phase
+                this.testState.awaiting_test_selection = true;
+                awaitingTestSelection = true;
+                keepStateForRestart = true;
+                // Clear current phase progress so restart begins fresh
+                this.testState.progress.completed_steps = 0;
+                this.testState.progress.current_step = 0;
+                this.testState.progress.total_steps = this.calculateTotalSteps(this.currentTest, this.testState.current_phase);
+                console.log(`[MasterTest] Test stopped during ${this.testState.current_phase}, allowing restart`);
+            }
+            // If stopped during boundary detection (not complete), awaiting_test_selection stays false
+            // This will show "Start Test" button to restart boundary
+
             await testService.updateTestStatus(this.currentTest.test_id, 'PAUSED');
             await this.saveTestState();
         }
 
+        const testStateForEvent = this.testState ? {
+            awaiting_test_selection: awaitingTestSelection,
+            current_phase: this.testState.current_phase,
+            boundary_detection_completed: this.testState.boundary_detection_completed,
+            tangential_test_completed: this.testState.tangential_test_completed,
+            radial_test_completed: this.testState.radial_test_completed
+        } : {
+            awaiting_test_selection: awaitingTestSelection
+        };
+
         this.isRunning = false;
         this.isPaused = false;
-        this.currentTest = null;
+        // Keep state/currentTest if we want to allow phase restart
+        if (!keepStateForRestart) {
+            this.currentTest = null;
+            this.testState = null;
+        } else if (this.testState) {
+            // Ensure we mark awaiting selection for restart of the stopped phase
+            this.testState.awaiting_test_selection = true;
+            this.testState.awaiting_user_confirmation = false;
+            await this.saveTestState();
+        }
 
-        this.emit("test_stopped");
+        this.emit("test_stopped", testStateForEvent);
     }
 
     private async saveTestState(): Promise<void> {
@@ -1433,6 +1538,81 @@ export class MasterTestOrchestrator extends EventEmitter {
 
     getTestState(): TestState | null {
         return this.testState;
+    }
+
+    /**
+     * Restore orchestrator state from database
+     * Used when server restarts or loses in-memory state
+     */
+    async restoreFromDatabase(testId: number, dbState: any, testConfig?: MasterTestConfiguration): Promise<void> {
+        console.log(`[MasterTest] 🔄 Restoring state from database for test ${testId}`);
+
+        const stateData = dbState.state_data || {};
+
+        // Parse boundary results
+        let boundaryResults = [];
+        if (dbState.boundary_results) {
+            try {
+                boundaryResults = typeof dbState.boundary_results === 'string'
+                    ? JSON.parse(dbState.boundary_results)
+                    : dbState.boundary_results;
+            } catch (err) {
+                console.error("[MasterTest] Failed to parse boundary_results:", err);
+                boundaryResults = [];
+            }
+        }
+
+        // If test config provided, set it (needed for startNextPhase to work)
+        if (testConfig) {
+            this.currentTest = testConfig;
+            console.log("[MasterTest] Test configuration restored");
+        } else {
+            console.warn("[MasterTest] ⚠️ No test configuration provided - startNextPhase may fail");
+        }
+
+        // Restore test state
+        this.testState = {
+            test_id: testId,
+            current_phase: dbState.current_phase || 'BOUNDARY_DETECTION',
+            boundary_results: boundaryResults,
+            awaiting_user_confirmation: stateData.awaiting_user_confirmation || false,
+            awaiting_test_selection: stateData.awaiting_test_selection || false,
+            boundary_detection_completed: stateData.boundary_detection_completed || false,
+            tangential_test_completed: stateData.tangential_test_completed || false,
+            radial_test_completed: stateData.radial_test_completed || false,
+            completed_step_count: stateData.completed_step_count || 0,
+            progress: {
+                phase: dbState.current_phase || 'BOUNDARY_DETECTION',
+                total_steps: stateData.total_steps || 0,
+                completed_steps: stateData.completed_steps || 0,
+                current_step: stateData.current_step || 0
+            }
+        };
+
+        // Mark as not running (paused/awaiting)
+        this.isRunning = false;
+        this.isPaused = false;
+
+        console.log("[MasterTest] ✅ State restored:", {
+            test_id: this.testState.test_id,
+            current_phase: this.testState.current_phase,
+            boundary_complete: this.testState.boundary_detection_completed,
+            tangential_complete: this.testState.tangential_test_completed,
+            radial_complete: this.testState.radial_test_completed,
+            awaiting_selection: this.testState.awaiting_test_selection
+        });
+
+        // If awaiting test selection, emit event to trigger modal
+        if (this.testState.awaiting_test_selection) {
+            console.log("[MasterTest] 📢 Emitting phase_completed_awaiting_next event");
+
+            this.emit("phase_completed_awaiting_next", {
+                boundary_results: this.testState.boundary_results,
+                tangential_completed: this.testState.tangential_test_completed,
+                radial_completed: this.testState.radial_test_completed,
+                message: "Test state restored. Please select next phase."
+            });
+        }
     }
 
     private ensureNotStopped(): void {

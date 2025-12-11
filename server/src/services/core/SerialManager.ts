@@ -90,6 +90,49 @@ export class SerialManager extends EventEmitter {
         return this.lastWrite;
     }
 
+    /**
+     * Send command and wait for JSON response
+     * Returns the response line (JSON string)
+     */
+    async sendCommand(command: string, timeoutMs = 5000): Promise<string> {
+        if (!this.connected) throw new Error("Not connected");
+
+        return new Promise((resolve, reject) => {
+            let timer: NodeJS.Timeout | null = setTimeout(() => {
+                cleanup();
+                reject(new Error(`Command timeout: ${command}`));
+            }, timeoutMs);
+
+            const onData = (line: string) => {
+                // We expect JSON response
+                try {
+                    const parsed = JSON.parse(line);
+                    if (timer) clearTimeout(timer);
+                    cleanup();
+                    resolve(line);
+                } catch {
+                    // Not a JSON line, keep waiting
+                }
+            };
+
+            const cleanup = () => {
+                this.off("data", onData);
+                if (timer) {
+                    clearTimeout(timer);
+                    timer = null;
+                }
+            };
+
+            this.on("data", onData);
+
+            // Send the command
+            this.send(command).catch((err) => {
+                cleanup();
+                reject(err);
+            });
+        });
+    }
+
     /** Wait until an exact line equals `expected`, or timeout. */
     private waitForLine(expected: string, timeoutMs: number): Promise<boolean> {
         return new Promise((resolve) => {
