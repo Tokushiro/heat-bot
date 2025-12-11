@@ -84,27 +84,62 @@ export default function HistoryPage() {
                         // Fetch test state
                         const stateRes = await api.get(`/api/test/${test.test_id}/state`);
 
-                        // Fetch test step summary
+                        // Fetch test step summary (discarded here, but triggers server-side aggregate updates if any)
                         await api.get(`/api/test/${test.test_id}/steps/summary`);
+
+                        // Safely parse boundary results (array or JSON string)
+                        let boundaryResults: BoundaryResult[] = [];
+                        const rawBoundaryResults = stateRes.data?.boundary_results;
+                        if (Array.isArray(rawBoundaryResults)) {
+                            boundaryResults = rawBoundaryResults;
+                        } else if (typeof rawBoundaryResults === 'string' && rawBoundaryResults.trim()) {
+                            try {
+                                boundaryResults = JSON.parse(rawBoundaryResults);
+                            } catch (err) {
+                                console.warn("Failed to parse boundary_results for test", test.test_id, err);
+                                boundaryResults = [];
+                            }
+                        }
+
+                        const boundaryCompleted =
+                            stateRes.data?.boundary_detection_completed ||
+                            (boundaryResults?.length ?? 0) > 0;
+                        const tangentialCompleted = Boolean(stateRes.data?.tangential_test_completed);
+                        const radialCompleted = Boolean(stateRes.data?.radial_test_completed);
+
+                        // Derive a best-effort current phase when backend doesn't send one
+                        let derivedPhase = stateRes.data?.current_phase;
+                        if (!derivedPhase) {
+                            if (tangentialCompleted && radialCompleted) {
+                                derivedPhase = 'COMPLETED';
+                            } else if (tangentialCompleted && !radialCompleted) {
+                                derivedPhase = 'TANGENTIAL_TEST';
+                            } else if (radialCompleted && !tangentialCompleted) {
+                                derivedPhase = 'RADIAL_TEST';
+                            } else if (boundaryCompleted) {
+                                derivedPhase = 'BOUNDARY_DETECTION';
+                            }
+                        }
 
                         return {
                             ...test,
                             test_date: new Date(test.test_date),
                             status: test.status ?? 'PLANNED',
-                            test_phase: stateRes.data?.current_phase,
+                            test_phase: derivedPhase,
                             awaiting_confirmation: stateRes.data?.awaiting_confirmation,
-                            awaiting_test_selection: stateRes.data?.awaiting_test_selection,
-                            boundary_results: stateRes.data?.boundary_results ? JSON.parse(stateRes.data.boundary_results) : [],
-                            boundary_detection_completed: stateRes.data?.boundary_detection_completed,
-                            tangential_test_completed: stateRes.data?.tangential_test_completed,
-                            radial_test_completed: stateRes.data?.radial_test_completed,
+                            awaiting_test_selection: stateRes.data?.awaiting_test_selection || stateRes.data?.state_data?.awaiting_test_selection,
+                            boundary_results: boundaryResults,
+                            boundary_detection_completed: boundaryCompleted,
+                            tangential_test_completed: tangentialCompleted,
+                            radial_test_completed: radialCompleted,
                             last_position_x: stateRes.data?.last_position_x,
                             last_position_y: stateRes.data?.last_position_y,
                             last_position_timestamp: stateRes.data?.last_position_timestamp,
                             completed_step_count: stateRes.data?.completed_step_count || 0,
                             last_completed_angle: stateRes.data?.last_completed_angle
                         };
-                    } catch {
+                    } catch (err) {
+                        console.warn("Failed to hydrate state for test", test.test_id, err);
                         return {
                             ...test,
                             test_date: new Date(test.test_date),
@@ -195,9 +230,17 @@ export default function HistoryPage() {
         }
     };
 
-    const handleExportCSV = async (testId: number | null | undefined) => {
+    const handleExportCSV = async (test: TestWithState) => {
+        const testId = test.test_id;
         if (!testId) {
             message.error("Cannot export test with invalid ID");
+            return;
+        }
+
+        const phasesCompleted = !!test.boundary_detection_completed && !!test.tangential_test_completed && !!test.radial_test_completed;
+        const statusCompleted = test.status === 'COMPLETED';
+        if (!phasesCompleted || !statusCompleted) {
+            message.warning("CSV export is available only after boundary, tangential, and radial phases are completed.");
             return;
         }
 
@@ -230,7 +273,8 @@ export default function HistoryPage() {
             message.success({ content: 'IEC 63180 comprehensive report exported successfully', key: 'export' });
         } catch (err) {
             console.error("Error exporting CSV:", err);
-            message.error({ content: 'Failed to export CSV', key: 'export' });
+            const axiosError = err as { response?: { data?: { error?: string } } };
+            message.error({ content: axiosError?.response?.data?.error ?? 'Failed to export CSV', key: 'export' });
         }
     };
 
@@ -275,7 +319,7 @@ export default function HistoryPage() {
     const getIndividualPhaseStatus = (phaseCompleted?: boolean, awaiting?: boolean, currentPhase?: string, phaseName?: string, testStatus?: string) => {
         if (phaseCompleted) {
             return { color: 'green', icon: <CheckCircleOutlined />, text: 'Finished' };
-        } else if (awaiting && currentPhase === phaseName) {
+        } else if (awaiting && (currentPhase === phaseName || !currentPhase)) {
             return { color: 'gold', icon: <ClockCircleOutlined />, text: 'Awaiting Selection' };
         } else if (currentPhase === phaseName && testStatus === 'IN_PROGRESS') {
             return { color: 'blue', icon: <ClockCircleOutlined />, text: 'In Progress' };
@@ -294,23 +338,28 @@ export default function HistoryPage() {
         const steps = testSteps[item.test_id!];
         const hasPosition = item.last_position_x !== undefined && item.last_position_y !== undefined;
 
+        // Derive completion flags defensively (handles missing state flags)
+        const boundaryCompleted = Boolean(item.boundary_detection_completed || (item.boundary_results?.length ?? 0) > 0);
+        const tangentialCompleted = Boolean(item.tangential_test_completed);
+        const radialCompleted = Boolean(item.radial_test_completed);
+
         // Get status for each phase
         const boundaryStatus = getIndividualPhaseStatus(
-            item.boundary_detection_completed,
+            boundaryCompleted,
             item.awaiting_test_selection,
             item.test_phase,
             'BOUNDARY_DETECTION',
             item.status
         );
         const tangentialStatus = getIndividualPhaseStatus(
-            item.tangential_test_completed,
+            tangentialCompleted,
             item.awaiting_test_selection,
             item.test_phase,
             'TANGENTIAL_TEST',
             item.status
         );
         const radialStatus = getIndividualPhaseStatus(
-            item.radial_test_completed,
+            radialCompleted,
             item.awaiting_test_selection,
             item.test_phase,
             'RADIAL_TEST',
@@ -746,6 +795,12 @@ export default function HistoryPage() {
                         <Space direction="vertical" size={12} style={{ width: "100%" }}>
                             {items.map(item => {
                                 const isExpanded = expandedKeys.includes(item.test_id?.toString() || '');
+                                const phasesComplete = Boolean(
+                                    item.boundary_detection_completed &&
+                                    item.tangential_test_completed &&
+                                    item.radial_test_completed
+                                );
+                                const canExport = phasesComplete && item.status === 'COMPLETED';
 
                                 return (
                                     <div key={item.test_id ?? `test-${item.test_name}`}>
@@ -813,7 +868,9 @@ export default function HistoryPage() {
                                                         </Button>
                                                         <Button
                                                             icon={<DownloadOutlined />}
-                                                            onClick={() => handleExportCSV(item.test_id)}
+                                                            onClick={() => handleExportCSV(item)}
+                                                            disabled={!canExport}
+                                                            title={!canExport ? "Complete all phases to enable CSV export" : undefined}
                                                         >
                                                             Export CSV
                                                         </Button>

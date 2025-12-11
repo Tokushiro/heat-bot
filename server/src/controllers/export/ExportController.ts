@@ -42,10 +42,18 @@ export async function exportBoundaryTest(req: Request, res: Response) {
             SELECT angle, distance_1 as distance_to_sensor, detection_final as detection_occurred,
                    finished_at as recorded_at, sequence_no as repeat_number
             FROM test_step
-            WHERE test_id = $1 AND step_type = 'BOUNDARY_DETECTION'
+            WHERE test_id = $1 AND step_type = 'BOUNDARY_DETECTION_RADIAL'
             ORDER BY angle, sequence_no
         `;
         const stepsResult = await pool.query(stepsQuery, [testId]);
+
+        if (stepsResult.rows.length === 0) {
+            return res.status(404).json({ error: 'No radial measurements found for this test' });
+        }
+
+        if (stepsResult.rows.length === 0) {
+            return res.status(404).json({ error: 'No boundary measurements found for this test' });
+        }
 
         // Fetch environment data (average)
         const envQuery = `
@@ -59,7 +67,7 @@ export async function exportBoundaryTest(req: Request, res: Response) {
         const measurements = stepsResult.rows.map((row: any) => ({
             angle: row.angle,
             distance: row.distance_to_sensor,
-            detected: row.detection_occurred,
+            detected: row.detection_occurred === true || row.detection_occurred === 'true',
             timestamp: new Date(row.recorded_at),
             attempts: row.repeat_number
         }));
@@ -127,10 +135,14 @@ export async function exportGridTest(req: Request, res: Response) {
         const cellsQuery = `
             SELECT angle, distance_1, detection_final as detected
             FROM test_step
-            WHERE test_id = $1 AND step_type = 'TANGENTIAL_TEST'
-            ORDER BY angle
+            WHERE test_id = $1 AND step_type IN ('COMPLIANCE_TANGENTIAL', 'TANGENTIAL_SWEEP')
+            ORDER BY angle, sequence_no
         `;
         const cellsResult = await pool.query(cellsQuery, [testId]);
+
+        if (cellsResult.rows.length === 0) {
+            return res.status(404).json({ error: 'No tangential compliance measurements found for this test' });
+        }
 
         // Fetch grid configuration from test_state or assume defaults
         const gridConfig = {
@@ -149,16 +161,19 @@ export async function exportGridTest(req: Request, res: Response) {
 
         // Transform data - map test_step results to grid cell format
         // For tangential tests, we organize by angle and distance
-        const cells = cellsResult.rows.map((row: any, index: number) => ({
-            cellRow: Math.floor(index / 6), // Assuming 6 columns
-            cellCol: index % 6,
-            centerX: row.distance_1 * Math.cos(row.angle * Math.PI / 180),
-            centerY: row.distance_1 * Math.sin(row.angle * Math.PI / 180),
-            detected: row.detected,
-            attempts: 1,
-            coveragePercent: row.detected ? 100 : 0,
-            anglesCovered: [row.angle]
-        }));
+        const cells = cellsResult.rows.map((row: any, index: number) => {
+            const detected = row.detected === true || row.detected === 'true';
+            return {
+                cellRow: Math.floor(index / 6), // Assuming 6 columns
+                cellCol: index % 6,
+                centerX: row.distance_1 * Math.cos(row.angle * Math.PI / 180),
+                centerY: row.distance_1 * Math.sin(row.angle * Math.PI / 180),
+                detected,
+                attempts: 1,
+                coveragePercent: detected ? 100 : 0,
+                anglesCovered: [row.angle]
+            };
+        });
 
         const metadata = {
             testId: test.test_id,
@@ -223,7 +238,7 @@ export async function exportRadialTest(req: Request, res: Response) {
             SELECT angle, distance_1 as distance_to_sensor, detection_final as detection_occurred,
                    finished_at as recorded_at, sequence_no as repeat_number
             FROM test_step
-            WHERE test_id = $1 AND (step_type = 'COMPLIANCE_RADIAL' OR step_type = 'RADIAL_TEST')
+            WHERE test_id = $1 AND step_type IN ('COMPLIANCE_RADIAL', 'RADIAL_COMPLIANCE', 'RADIAL_TEST')
             ORDER BY angle, distance_1, sequence_no
         `;
         const stepsResult = await pool.query(stepsQuery, [testId]);
@@ -240,7 +255,7 @@ export async function exportRadialTest(req: Request, res: Response) {
         const measurements = stepsResult.rows.map((row: any) => ({
             angle: row.angle,
             distance: row.distance_to_sensor,
-            detected: row.detection_occurred,
+            detected: row.detection_occurred === true || row.detection_occurred === 'true',
             timestamp: new Date(row.recorded_at),
             repeatNumber: row.repeat_number
         }));
@@ -291,7 +306,7 @@ export async function exportComprehensiveTest(req: Request, res: Response) {
 
         // Fetch test metadata with sensor information
         const testQuery = `
-            SELECT t.test_id, t.test_name, t.sensor_id, t.started_at, t.finished_at,
+            SELECT t.test_id, t.test_name, t.sensor_id, t.started_at, t.finished_at, t.status,
                    s.hw_version, s.sw_version, s.mounting_height
             FROM test t
             LEFT JOIN sensor s ON t.sensor_id = s.sensor_id
@@ -305,12 +320,59 @@ export async function exportComprehensiveTest(req: Request, res: Response) {
 
         const test = testResult.rows[0];
 
+        // Ensure all phases are completed before exporting
+        const stateResult = await pool.query(
+            `SELECT state_data, boundary_results FROM test_state WHERE test_id = $1`,
+            [testId]
+        );
+
+        let stateData: any = {};
+        let boundaryResultsFromState: any[] = [];
+
+        if (stateResult.rows.length > 0) {
+            const row = stateResult.rows[0];
+            try {
+                stateData = typeof row.state_data === 'string' ? JSON.parse(row.state_data) : (row.state_data || {});
+            } catch {
+                stateData = {};
+            }
+            try {
+                boundaryResultsFromState = typeof row.boundary_results === 'string'
+                    ? JSON.parse(row.boundary_results)
+                    : (row.boundary_results || []);
+            } catch {
+                boundaryResultsFromState = [];
+            }
+        }
+
+        const [boundaryCountRes, tangentialCountRes, radialCountRes] = await Promise.all([
+            pool.query(`SELECT COUNT(*) FROM test_step WHERE test_id = $1 AND step_type = 'BOUNDARY_DETECTION_RADIAL'`, [testId]),
+            pool.query(`SELECT COUNT(*) FROM test_step WHERE test_id = $1 AND step_type IN ('COMPLIANCE_TANGENTIAL', 'TANGENTIAL_SWEEP')`, [testId]),
+            pool.query(`SELECT COUNT(*) FROM test_step WHERE test_id = $1 AND step_type IN ('COMPLIANCE_RADIAL', 'RADIAL_COMPLIANCE', 'RADIAL_TEST')`, [testId])
+        ]);
+
+        const boundaryComplete = !!stateData.boundary_detection_completed || boundaryResultsFromState.length > 0 || parseInt(boundaryCountRes.rows[0]?.count || '0', 10) > 0;
+        const tangentialComplete = !!stateData.tangential_test_completed || parseInt(tangentialCountRes.rows[0]?.count || '0', 10) > 0;
+        const radialComplete = !!stateData.radial_test_completed || parseInt(radialCountRes.rows[0]?.count || '0', 10) > 0;
+        const statusComplete = test.status === 'COMPLETED';
+        const allPhasesComplete = boundaryComplete && tangentialComplete && radialComplete;
+
+        if (!allPhasesComplete || !statusComplete) {
+            return res.status(400).json({
+                error: 'All phases must be completed before exporting the comprehensive CSV',
+                boundaryComplete,
+                tangentialComplete,
+                radialComplete,
+                statusComplete
+            });
+        }
+
         // Fetch boundary detection test steps
         const boundaryQuery = `
             SELECT angle, distance_1 as distance_to_sensor, detection_final as detection_occurred,
                    finished_at as recorded_at, sequence_no as repeat_number
             FROM test_step
-            WHERE test_id = $1 AND step_type = 'BOUNDARY_DETECTION'
+            WHERE test_id = $1 AND step_type = 'BOUNDARY_DETECTION_RADIAL'
             ORDER BY angle, sequence_no
         `;
         const boundaryResult = await pool.query(boundaryQuery, [testId]);
@@ -320,10 +382,18 @@ export async function exportComprehensiveTest(req: Request, res: Response) {
             SELECT angle, distance_1 as distance_to_sensor, detection_final as detection_occurred,
                    finished_at as recorded_at, sequence_no as repeat_number
             FROM test_step
-            WHERE test_id = $1 AND (step_type = 'COMPLIANCE_RADIAL' OR step_type = 'RADIAL_TEST')
+            WHERE test_id = $1 AND step_type IN ('COMPLIANCE_RADIAL', 'RADIAL_COMPLIANCE', 'RADIAL_TEST')
             ORDER BY angle, distance_1, sequence_no
         `;
         const radialResult = await pool.query(radialQuery, [testId]);
+
+        if (boundaryResult.rows.length === 0) {
+            return res.status(404).json({ error: 'No boundary measurements found for this test' });
+        }
+
+        if (radialResult.rows.length === 0) {
+            return res.status(404).json({ error: 'No radial measurements found for this test' });
+        }
 
         // Fetch environment data (average)
         const envQuery = `
@@ -337,7 +407,7 @@ export async function exportComprehensiveTest(req: Request, res: Response) {
         const boundaryData = boundaryResult.rows.map((row: any) => ({
             angle: row.angle,
             distance: row.distance_to_sensor || 0,
-            detected: row.detection_occurred || false,
+            detected: row.detection_occurred === true || row.detection_occurred === 'true',
             timestamp: row.recorded_at ? new Date(row.recorded_at) : new Date(),
             attempts: row.repeat_number
         }));
@@ -346,7 +416,7 @@ export async function exportComprehensiveTest(req: Request, res: Response) {
         const radialData = radialResult.rows.length > 0 ? radialResult.rows.map((row: any) => ({
             angle: row.angle,
             distance: row.distance_to_sensor || 0,
-            detected: row.detection_occurred || false,
+            detected: row.detection_occurred === true || row.detection_occurred === 'true',
             timestamp: row.recorded_at ? new Date(row.recorded_at) : new Date(),
             repeatNumber: row.repeat_number
         })) : undefined;
