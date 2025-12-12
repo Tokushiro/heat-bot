@@ -250,12 +250,12 @@ export default function ManualControl() {
     const [polling, setPolling] = useState<boolean>(false);
     const [armed, setArmed] = useState<boolean>(false);
     const [homing, setHoming] = useState<boolean>(false);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const [standStatus, setStandStatus] = useState<StandStatus | null>(null);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const [heatingZones, setHeatingZones] = useState<HeatingZoneStatus[]>([]);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const [targetAngle, setTargetAngle] = useState<number>(0);
+    // Reserved for future stand control feature
+    const [_standStatus, setStandStatus] = useState<StandStatus | null>(null);
+    // Reserved for future heating control feature
+    const [_heatingZones, setHeatingZones] = useState<HeatingZoneStatus[]>([]);
+    // Reserved for future stand control feature
+    const [_targetAngle, setTargetAngle] = useState<number>(0);
 
     useEffect(() => {
         const es = new EventSource("/api/telemetry/stream");
@@ -460,8 +460,8 @@ export default function ManualControl() {
     }, [armed, homing, stopMove]);
 
     // Stand control handlers (for future UI features)
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const handleSetAngle = useCallback(async (angle: number) => {
+    // Reserved for future stand control feature
+    const _handleSetAngle = useCallback(async (angle: number) => {
         try {
             await api.post("/api/stand/set-angle", { angle });
             setTargetAngle(angle);
@@ -472,8 +472,8 @@ export default function ManualControl() {
         }
     }, []);
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const handleStepAngle = useCallback(async (delta: number) => {
+    // Reserved for future stand control feature
+    const _handleStepAngle = useCallback(async (delta: number) => {
         try {
             await api.post("/api/stand/step-angle", { delta });
             message.success(`Stand stepped ${delta > 0 ? "+" : ""}${delta}°`);
@@ -484,8 +484,8 @@ export default function ManualControl() {
     }, []);
 
     // Heating control handlers (for future UI features)
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const handleInitHeating = useCallback(async () => {
+    // Reserved for future heating control feature
+    const _handleInitHeating = useCallback(async () => {
         try {
             await api.post("/api/heating/initialize");
             message.success("Heating initialized");
@@ -495,8 +495,8 @@ export default function ManualControl() {
         }
     }, []);
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const handleEnableHeating = useCallback(async () => {
+    // Reserved for future heating control feature
+    const _handleEnableHeating = useCallback(async () => {
         try {
             await api.post("/api/heating/enable-all");
             message.success("Heating enabled");
@@ -506,8 +506,8 @@ export default function ManualControl() {
         }
     }, []);
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const handleDisableHeating = useCallback(async () => {
+    // Reserved for future heating control feature
+    const _handleDisableHeating = useCallback(async () => {
         try {
             await api.post("/api/heating/disable-all");
             message.success("Heating disabled");
@@ -516,6 +516,13 @@ export default function ManualControl() {
             message.error("Failed to disable heating");
         }
     }, []);
+
+    // Mark future handlers as intentionally unused
+    void _handleSetAngle;
+    void _handleStepAngle;
+    void _handleInitHeating;
+    void _handleEnableHeating;
+    void _handleDisableHeating;
 
     // --------------- Keyboard support ---------------
     useEffect(() => {
@@ -829,6 +836,7 @@ export default function ManualControl() {
                                             <Button
                                                 shape="circle"
                                                 size="large"
+                                                type={activeDir === "up" ? "primary" : "default"}
                                                 disabled={!armed}
                                                 onMouseDown={() => void startMove("up")}
                                                 onMouseUp={() => void stopMove()}
@@ -837,7 +845,7 @@ export default function ManualControl() {
                                                 onTouchEnd={onTouchEndStop}
                                                 aria-label="Move up"
                                             >
-                                                <UpOutlined />
+                                                <UpOutlined /> {activeDir === "up" && "⚡"}
                                             </Button>
                                             <div />
 
@@ -845,6 +853,7 @@ export default function ManualControl() {
                                             <Button
                                                 shape="circle"
                                                 size="large"
+                                                type={activeDir === "left" ? "primary" : "default"}
                                                 disabled={!armed}
                                                 onMouseDown={() => void startMove("left")}
                                                 onMouseUp={() => void stopMove()}
@@ -853,7 +862,7 @@ export default function ManualControl() {
                                                 onTouchEnd={onTouchEndStop}
                                                 aria-label="Move left"
                                             >
-                                                <LeftCircleOutlined />
+                                                <LeftCircleOutlined /> {activeDir === "left" && "⚡"}
                                             </Button>
 
                                             <div
@@ -874,6 +883,7 @@ export default function ManualControl() {
                                             <Button
                                                 shape="circle"
                                                 size="large"
+                                                type={activeDir === "right" ? "primary" : "default"}
                                                 disabled={!armed}
                                                 onMouseDown={() => void startMove("right")}
                                                 onMouseUp={() => void stopMove()}
@@ -882,7 +892,7 @@ export default function ManualControl() {
                                                 onTouchEnd={onTouchEndStop}
                                                 aria-label="Move right"
                                             >
-                                                <RightCircleOutlined />
+                                                <RightCircleOutlined /> {activeDir === "right" && "⚡"}
                                             </Button>
 
                                             {/* Row 3 */}
@@ -890,6 +900,7 @@ export default function ManualControl() {
                                             <Button
                                                 shape="circle"
                                                 size="large"
+                                                type={activeDir === "down" ? "primary" : "default"}
                                                 disabled={!armed}
                                                 onMouseDown={() => void startMove("down")}
                                                 onMouseUp={() => void stopMove()}
@@ -898,7 +909,7 @@ export default function ManualControl() {
                                                 onTouchEnd={onTouchEndStop}
                                                 aria-label="Move down"
                                             >
-                                                <DownOutlined />
+                                                <DownOutlined /> {activeDir === "down" && "⚡"}
                                             </Button>
                                             <div />
                                         </div>

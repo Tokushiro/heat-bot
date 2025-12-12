@@ -6,36 +6,57 @@ import { emitRobotEvent, robotEventBus } from '../../services/telemetry/RobotEve
 
 const robotAPI = RobotAPIFactory.getInstance();
 
+// =============================================================================
+// CONTINUOUS MOVEMENT STATE
+// =============================================================================
+
+interface ContinuousMovementState {
+    active: boolean;
+    direction: 'up' | 'down' | 'left' | 'right' | null;
+    intervalId: NodeJS.Timeout | null;
+    currentTestId: number;
+}
+
+let continuousMovement: ContinuousMovementState = {
+    active: false,
+    direction: null,
+    intervalId: null,
+    currentTestId: 0
+};
+
 /**
- * Handle manual robot movement commands
- * Supports directional movement (up, down, left, right) with start/stop actions
+ * Start continuous movement in a direction
+ * Interval-based: sends small increments every 100ms while button is held
  */
-export async function handleMoveCommand(req: Request, res: Response) {
-    try {
-        const { direction, action, test_id, test_step_id } = req.body;
-        const commandTimestamp = new Date().toISOString();
+async function startContinuousMovement(direction: string, testId: number): Promise<void> {
+    // Stop any existing movement first
+    if (continuousMovement.active) {
+        await stopContinuousMovement();
+    }
 
-        if (!direction || !action) {
-            return res.status(400).json({
-                success: false,
-                error: 'Missing required fields: direction, action'
-            });
-        }
+    const stepSize = 0.05; // 5cm per interval (smooth continuous movement)
+    const intervalMs = 100; // Update every 100ms
 
-        emitRobotEvent("manual_move_command", { direction, action, timestamp: commandTimestamp });
+    continuousMovement.active = true;
+    continuousMovement.direction = direction as any;
+    continuousMovement.currentTestId = testId;
 
-        // For manual control, we'll use simple step movements
-        // Each direction maps to a small Cartesian movement
-        const stepSize = 0.1; // 10cm steps
+    console.log(`[RobotController] Starting continuous movement: ${direction}`);
 
-        if (action === 'start') {
-            // Get current position
+    emitRobotEvent("manual_control_started", {
+        direction,
+        testId,
+        timestamp: new Date().toISOString()
+    });
+
+    // Interval-based movement
+    continuousMovement.intervalId = setInterval(async () => {
+        try {
             const currentPos = await robotAPI.getCurrentPosition();
-
-            // Calculate target position based on direction
             let targetX = currentPos.x;
             let targetY = currentPos.y;
 
+            // Calculate target based on direction
             switch (direction) {
                 case 'up':
                     targetY += stepSize;
@@ -49,109 +70,140 @@ export async function handleMoveCommand(req: Request, res: Response) {
                 case 'right':
                     targetX += stepSize;
                     break;
-                default:
-                    return res.status(400).json({
-                        success: false,
-                        error: `Invalid direction: ${direction}`
-                    });
             }
 
-            // Move to target position
-            const result = await robotAPI.moveTo(targetX, targetY);
+            // Move to target
+            await robotAPI.moveTo(targetX, targetY);
 
-            // Log telemetry snapshot if test context provided
-            if (test_id && result.position) {
-                TelemetryService.recordSample({
-                    test_id,
-                    test_step_id,
-                    robot_position_x: result.position.x,
-                    robot_position_y: result.position.y,
-                    timestamp: new Date()
-                }).catch(err => {
-                    console.warn("[RobotController] Failed to record telemetry:", err);
-                });
-            }
-
-            // Broadcast manual telemetry for UI (test_id 0 marks manual)
-            if (result.position) {
-                const resultTimestamp = new Date();
-                emitTelemetry({
-                    test_id: 0,
-                    robot_position_x: result.position.x,
-                    robot_position_y: result.position.y,
-                    timestamp: resultTimestamp
-                });
-                emitRobotEvent("manual_move_result", {
-                    direction,
-                    action: 'start',
-                    success: result.success,
-                    position: result.position,
-                    duration: result.duration,
-                    timestamp: resultTimestamp.toISOString()
-                });
-            } else {
-                emitRobotEvent("manual_move_result", {
-                    direction,
-                    action: 'start',
-                    success: result.success,
-                    duration: result.duration,
-                    timestamp: new Date().toISOString()
-                });
-            }
-
-            return res.status(200).json({
-                success: result.success,
-                direction,
-                action: 'start',
-                position: result.position,
-                duration: result.duration
+            // Emit telemetry for UI updates
+            const timestamp = new Date();
+            emitTelemetry({
+                test_id: testId,
+                robot_position_x: targetX,
+                robot_position_y: targetY,
+                timestamp
             });
 
-        } else if (action === 'stop') {
-            // Stop movement immediately
-            await robotAPI.stopMovement();
+            // Also emit robot event for manual control page
+            emitRobotEvent("manual_move_result", {
+                direction,
+                action: 'continue',
+                success: true,
+                position: { x: targetX, y: targetY },
+                timestamp: timestamp.toISOString()
+            });
 
-            const currentPos = await robotAPI.getCurrentPosition();
-
-            // Log telemetry snapshot if test context provided
-            if (test_id && currentPos) {
+            // Log telemetry if test context provided
+            if (testId > 0) {
                 TelemetryService.recordSample({
-                    test_id,
-                    test_step_id,
-                    robot_position_x: currentPos.x,
-                    robot_position_y: currentPos.y,
-                    timestamp: new Date()
+                    test_id: testId,
+                    robot_position_x: targetX,
+                    robot_position_y: targetY,
+                    timestamp
                 }).catch(err => {
                     console.warn("[RobotController] Failed to record telemetry:", err);
                 });
             }
 
-            if (currentPos) {
-                const stopTimestamp = new Date();
-                emitTelemetry({
-                    test_id: 0,
-                    robot_position_x: currentPos.x,
-                    robot_position_y: currentPos.y,
-                    timestamp: stopTimestamp
-                });
-                emitRobotEvent("manual_move_result", {
-                    direction,
-                    action: 'stop',
-                    success: true,
-                    position: currentPos,
-                    timestamp: stopTimestamp.toISOString()
-                });
-            } else {
-                emitRobotEvent("manual_move_result", {
-                    direction,
-                    action: 'stop',
-                    success: true,
-                    timestamp: new Date().toISOString()
-                });
-            }
+        } catch (error) {
+            console.error("[RobotController] Continuous movement error:", error);
+            await stopContinuousMovement();
+            emitRobotEvent("robot_error", {
+                error: error instanceof Error ? error.message : "Unknown error",
+                context: "continuous_movement",
+                timestamp: new Date().toISOString()
+            });
+        }
+    }, intervalMs);
+}
+
+/**
+ * Stop continuous movement
+ */
+async function stopContinuousMovement(): Promise<void> {
+    if (continuousMovement.intervalId) {
+        clearInterval(continuousMovement.intervalId);
+        continuousMovement.intervalId = null;
+    }
+
+    if (continuousMovement.active) {
+        console.log(`[RobotController] Stopping continuous movement: ${continuousMovement.direction}`);
+
+        await robotAPI.stopMovement();
+
+        const currentPos = await robotAPI.getCurrentPosition();
+
+        emitRobotEvent("manual_control_stopped", {
+            direction: continuousMovement.direction,
+            position: currentPos,
+            timestamp: new Date().toISOString()
+        });
+
+        // Emit final position
+        if (currentPos) {
+            const timestamp = new Date();
+            emitTelemetry({
+                test_id: continuousMovement.currentTestId,
+                robot_position_x: currentPos.x,
+                robot_position_y: currentPos.y,
+                timestamp
+            });
+        }
+    }
+
+    continuousMovement.active = false;
+    continuousMovement.direction = null;
+}
+
+// =============================================================================
+// HTTP ENDPOINTS
+// =============================================================================
+
+/**
+ * Handle manual robot movement commands
+ * Supports continuous movement (hold-to-move) with start/stop actions
+ */
+export async function handleMoveCommand(req: Request, res: Response) {
+    try {
+        const { direction, action, test_id } = req.body;
+        const commandTimestamp = new Date().toISOString();
+
+        if (!direction || !action) {
+            return res.status(400).json({
+                success: false,
+                error: 'Missing required fields: direction, action'
+            });
+        }
+
+        if (!['up', 'down', 'left', 'right'].includes(direction)) {
+            return res.status(400).json({
+                success: false,
+                error: `Invalid direction: ${direction}`
+            });
+        }
+
+        emitRobotEvent("manual_move_command", { direction, action, timestamp: commandTimestamp });
+
+        if (action === 'start') {
+            // Start continuous movement
+            await startContinuousMovement(direction, test_id || 0);
 
             return res.status(200).json({
                 success: true,
+                message: 'Continuous movement started',
+                direction,
+                action: 'start'
+            });
+
+        } else if (action === 'stop') {
+            // Stop continuous movement
+            await stopContinuousMovement();
+
+            const currentPos = await robotAPI.getCurrentPosition();
+
+            return res.status(200).json({
+                success: true,
+                message: 'Movement stopped',
                 direction,
                 action: 'stop',
                 position: currentPos
@@ -194,6 +246,10 @@ export async function stopManualControl(_req: Request, res: Response) {
     const timestamp = new Date().toISOString();
 
     try {
+        // Stop any continuous movement
+        await stopContinuousMovement();
+
+        // Also stop robot
         await robotAPI.stopMovement();
     } catch (error) {
         console.warn("[RobotController] Failed to stop robot during manual stop:", error);
@@ -229,6 +285,10 @@ export async function getCurrentPosition(req: Request, res: Response) {
  */
 export async function stopMovement(req: Request, res: Response) {
     try {
+        // Stop continuous movement if active
+        await stopContinuousMovement();
+
+        // Also stop robot
         await robotAPI.stopMovement();
 
         const position = await robotAPI.getCurrentPosition();
@@ -276,11 +336,13 @@ export async function homeRobot(req: Request, res: Response) {
  */
 export function isMoving(req: Request, res: Response) {
     try {
-        const moving = robotAPI.isRobotMoving();
+        const moving = robotAPI.isRobotMoving() || continuousMovement.active;
 
         return res.status(200).json({
             success: true,
-            isMoving: moving
+            isMoving: moving,
+            continuousMode: continuousMovement.active,
+            direction: continuousMovement.direction
         });
 
     } catch (error) {
