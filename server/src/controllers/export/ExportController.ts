@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { IECExportService } from '../../services/export/IECExportService';
+import { ExcelTemplateService } from '../../services/export/ExcelTemplateService';
 import pool from '../../db_conn';
 
 /**
@@ -497,6 +498,146 @@ export async function exportComprehensiveTest(req: Request, res: Response) {
         console.error('[ExportController] Export comprehensive test error:', error);
         return res.status(500).json({
             error: 'Failed to export comprehensive test',
+            details: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+}
+
+/**
+ * Export comprehensive IEC 63180 test report as Excel workbook (multi-tab)
+ * GET /api/export/excel/:testId
+ */
+export async function exportExcelReport(req: Request, res: Response) {
+    try {
+        const testId = parseInt(req.params.testId, 10);
+
+        if (isNaN(testId)) {
+            return res.status(400).json({ error: 'Invalid test ID' });
+        }
+
+        console.log(`[ExportController] Exporting Excel report for test ${testId}`);
+
+        // Fetch test metadata with sensor information
+        const testQuery = `
+            SELECT t.test_id,
+                   t.test_name,
+                   t.sensor_id,
+                   t.started_at,
+                   t.finished_at,
+                   t.status,
+                   s.hw_version,
+                   s.sw_version,
+                   s.mounting_height,
+                   tc.test_name    AS choice_name,
+                   tc.test_standard,
+                   tc.test_method,
+                   tc.test_lab
+            FROM test t
+            LEFT JOIN sensor s ON t.sensor_id = s.sensor_id
+            LEFT JOIN test_choice tc ON t.test_choice = tc.test_choice_id
+            WHERE t.test_id = $1
+        `;
+        const testResult = await pool.query(testQuery, [testId]);
+
+        if (testResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Test not found' });
+        }
+
+        const test = testResult.rows[0];
+
+        // Fetch boundary measurements
+        const boundaryQuery = `
+            SELECT angle, distance_1 as distance_to_sensor, detection_final as detection_occurred
+            FROM test_step
+            WHERE test_id = $1 AND step_type = 'BOUNDARY_DETECTION_RADIAL'
+            ORDER BY angle
+        `;
+        const boundaryResult = await pool.query(boundaryQuery, [testId]);
+
+        // Fetch tangential measurements
+        const tangentialQuery = `
+            SELECT angle, distance_1 as distance, detection_final as detected
+            FROM test_step
+            WHERE test_id = $1 AND step_type IN ('GRID_TANGENTIAL', 'COMPLIANCE_TANGENTIAL')
+            ORDER BY angle, distance_1
+        `;
+        const tangentialResult = await pool.query(tangentialQuery, [testId]);
+
+        // Fetch radial measurements
+        const radialQuery = `
+            SELECT angle, distance_1 as distance, distance_2 as offset_from_boundary, detection_final as detected
+            FROM test_step
+            WHERE test_id = $1 AND step_type IN ('COMPLIANCE_RADIAL', 'RADIAL_SWEEP')
+            ORDER BY angle
+        `;
+        const radialResult = await pool.query(radialQuery, [testId]);
+
+        // Fetch environment data (average)
+        const envQuery = `
+            SELECT AVG(ambient_temp) as avg_temp, AVG(humidity) as avg_humidity
+            FROM telemetry_sample
+            WHERE test_id = $1
+        `;
+        const envResult = await pool.query(envQuery, [testId]);
+
+        // Transform data
+        const boundaryData = boundaryResult.rows.map((row: any) => ({
+            angle: row.angle,
+            distance: row.distance_to_sensor,
+            detected: row.detection_occurred === true || row.detection_occurred === 'true'
+        }));
+
+        const tangentialData = tangentialResult.rows.map((row: any) => ({
+            angle: row.angle,
+            distance: row.distance,
+            detected: row.detected === true || row.detected === 'true'
+        }));
+
+        const radialData = radialResult.rows.map((row: any) => ({
+            angle: row.angle,
+            distance: row.distance,
+            detected: row.detected === true || row.detected === 'true',
+            offsetFromBoundary: row.offset_from_boundary
+        }));
+
+        const metadata = {
+            testId: test.test_id,
+            testName: test.test_name,
+            sensorId: test.sensor_id,
+            hwVersion: test.hw_version,
+            swVersion: test.sw_version,
+            mountingHeight: test.mounting_height,
+            testLab: test.test_lab,
+            testStandard: test.test_standard,
+            testMethod: test.test_method,
+            testChoiceName: test.choice_name,
+            startTime: new Date(test.started_at),
+            endTime: test.finished_at ? new Date(test.finished_at) : undefined,
+            operator: 'H.E.A.T. Bot System',
+            temperature: envResult.rows[0].avg_temp ? parseFloat(envResult.rows[0].avg_temp) : undefined,
+            humidity: envResult.rows[0].avg_humidity ? parseFloat(envResult.rows[0].avg_humidity) : undefined
+        };
+
+        // Generate Excel workbook
+        const workbook = await ExcelTemplateService.generateIEC63180Report(
+            metadata,
+            boundaryData,
+            tangentialData,
+            radialData
+        );
+
+        // Set response headers
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="IEC63180_Test_${testId}_${test.test_name.replace(/\s+/g, '_')}.xlsx"`);
+
+        // Write to response
+        await workbook.xlsx.write(res);
+        res.end();
+
+    } catch (error) {
+        console.error('[ExportController] Export Excel report error:', error);
+        return res.status(500).json({
+            error: 'Failed to export Excel report',
             details: error instanceof Error ? error.message : 'Unknown error'
         });
     }

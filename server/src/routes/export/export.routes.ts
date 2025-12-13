@@ -3,7 +3,8 @@ import {
     exportBoundaryTest,
     exportGridTest,
     exportRadialTest,
-    exportComprehensiveTest
+    exportComprehensiveTest,
+    exportExcelReport
 } from '../../controllers/export/ExportController';
 
 const router = Router();
@@ -16,6 +17,9 @@ const router = Router();
 
 // Comprehensive test export (all test types combined - IEC 63180 format)
 router.get('/comprehensive/:testId', exportComprehensiveTest);
+
+// Excel report export (multi-tab IEC 63180 format)
+router.get('/excel/:testId', exportExcelReport);
 
 // Boundary test export
 router.get('/boundary/:testId', exportBoundaryTest);

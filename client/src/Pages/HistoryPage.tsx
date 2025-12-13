@@ -1,12 +1,12 @@
 import { useNavigate } from "react-router-dom";
-import { Layout, Typography, Button, Space, Tag, Empty, message, Progress, Statistic, Row, Col, Divider, Popconfirm, Card } from "antd";
-import { LeftOutlined, PlayCircleOutlined, DownOutlined, CheckCircleOutlined, ClockCircleOutlined, EnvironmentOutlined, DownloadOutlined, AimOutlined, CloseCircleOutlined } from "@ant-design/icons";
+import { Layout, Typography, Button, Space, Tag, Empty, message, Progress, Statistic, Row, Col, Divider, Popconfirm, Card, Tabs } from "antd";
+import { LeftOutlined, PlayCircleOutlined, DownOutlined, CheckCircleOutlined, ClockCircleOutlined, PauseCircleOutlined, EnvironmentOutlined, DownloadOutlined } from "@ant-design/icons";
 import type { TestDB } from "../Components/testCard.tsx";
 import { useEffect, useState, useCallback } from "react";
 import { api } from "../Components/apiAxios.ts";
 
 const { Header, Content } = Layout;
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
 interface BoundaryResult {
     angle: number;
@@ -15,11 +15,26 @@ interface BoundaryResult {
     detection_boundary: number | null;
 }
 
+interface TangentialResult {
+    angle: number;
+    distance: number;
+    detected: boolean;
+}
+
+interface RadialResult {
+    angle: number;
+    distance: number;
+    offset_from_boundary: number;
+    detected: boolean;
+}
+
 interface TestWithState extends TestDB {
     test_phase?: 'BOUNDARY_DETECTION' | 'TANGENTIAL_TEST' | 'RADIAL_TEST' | 'COMPLIANCE_TEST' | 'COMPLETED';
     awaiting_confirmation?: boolean;
     awaiting_test_selection?: boolean;
     boundary_results?: BoundaryResult[];
+    tangential_results?: TangentialResult[];
+    radial_results?: RadialResult[];
     boundary_detection_completed?: boolean;
     tangential_test_completed?: boolean;
     radial_test_completed?: boolean;
@@ -101,6 +116,37 @@ export default function HistoryPage() {
                             }
                         }
 
+                        // Load tangential results (if any)
+                        let tangentialResults: TangentialResult[] = [];
+                        try {
+                            const tangentialResp = await api.get(`/api/test/${test.test_id}/steps`, {
+                                params: { step_type: 'GRID_TANGENTIAL' }
+                            });
+                            tangentialResults = tangentialResp.data.map((step: any) => ({
+                                angle: step.angle,
+                                distance: step.distance_1,
+                                detected: step.detection_final
+                            }));
+                        } catch (err) {
+                            // No tangential results yet, that's okay
+                        }
+
+                        // Load radial results (if any)
+                        let radialResults: RadialResult[] = [];
+                        try {
+                            const radialResp = await api.get(`/api/test/${test.test_id}/steps`, {
+                                params: { step_type: 'COMPLIANCE_RADIAL' }
+                            });
+                            radialResults = radialResp.data.map((step: any) => ({
+                                angle: step.angle,
+                                distance: step.distance_1,
+                                offset_from_boundary: step.distance_2,
+                                detected: step.detection_final
+                            }));
+                        } catch (err) {
+                            // No radial results yet, that's okay
+                        }
+
                         const boundaryCompleted =
                             stateRes.data?.boundary_detection_completed ||
                             (boundaryResults?.length ?? 0) > 0;
@@ -129,6 +175,8 @@ export default function HistoryPage() {
                             awaiting_confirmation: stateRes.data?.awaiting_confirmation,
                             awaiting_test_selection: stateRes.data?.awaiting_test_selection || stateRes.data?.state_data?.awaiting_test_selection,
                             boundary_results: boundaryResults,
+                            tangential_results: tangentialResults,
+                            radial_results: radialResults,
                             boundary_detection_completed: boundaryCompleted,
                             tangential_test_completed: tangentialCompleted,
                             radial_test_completed: radialCompleted,
@@ -218,16 +266,23 @@ export default function HistoryPage() {
     };
 
     const handleContinue = (item: TestWithState) => {
-        if (item.awaiting_confirmation) {
-            navigate("/testingpattern1", {
-                state: {
-                    ...item,
-                    resuming: true
-                }
-            });
-        } else {
-            navigate("/testingpattern1", { state: item });
-        }
+        navigate("/testingpattern1", {
+            state: {
+                ...item,
+                resuming: true,
+                viewOnly: false
+            }
+        });
+    };
+
+    const handleView = (item: TestWithState) => {
+        navigate("/testingpattern1", {
+            state: {
+                ...item,
+                resuming: false,
+                viewOnly: true
+            }
+        });
     };
 
     const handleExportCSV = async (test: TestWithState) => {
@@ -237,8 +292,14 @@ export default function HistoryPage() {
             return;
         }
 
-        const phasesCompleted = !!test.boundary_detection_completed && !!test.tangential_test_completed && !!test.radial_test_completed;
+        // Check completion using same logic as phase status display
+        const boundaryCompleted = Boolean(test.boundary_detection_completed || (test.boundary_results?.length ?? 0) > 0);
+        const tangentialCompleted = Boolean(test.tangential_test_completed || (test.tangential_results?.length ?? 0) > 0);
+        const radialCompleted = Boolean(test.radial_test_completed || (test.radial_results?.length ?? 0) > 0);
+
+        const phasesCompleted = boundaryCompleted && tangentialCompleted && radialCompleted;
         const statusCompleted = test.status === 'COMPLETED';
+
         if (!phasesCompleted || !statusCompleted) {
             message.warning("CSV export is available only after boundary, tangential, and radial phases are completed.");
             return;
@@ -275,6 +336,63 @@ export default function HistoryPage() {
             console.error("Error exporting CSV:", err);
             const axiosError = err as { response?: { data?: { error?: string } } };
             message.error({ content: axiosError?.response?.data?.error ?? 'Failed to export CSV', key: 'export' });
+        }
+    };
+
+    const handleExportExcel = async (test: TestWithState) => {
+        const testId = test.test_id;
+        if (!testId) {
+            message.error("Cannot export test with invalid ID");
+            return;
+        }
+
+        // Check completion using same logic as phase status display
+        const boundaryCompleted = Boolean(test.boundary_detection_completed || (test.boundary_results?.length ?? 0) > 0);
+        const tangentialCompleted = Boolean(test.tangential_test_completed || (test.tangential_results?.length ?? 0) > 0);
+        const radialCompleted = Boolean(test.radial_test_completed || (test.radial_results?.length ?? 0) > 0);
+
+        const phasesCompleted = boundaryCompleted && tangentialCompleted && radialCompleted;
+        const statusCompleted = test.status === 'COMPLETED';
+
+        if (!phasesCompleted || !statusCompleted) {
+            message.warning("Excel export is available only after boundary, tangential, and radial phases are completed.");
+            return;
+        }
+
+        try {
+            message.loading({ content: 'Generating IEC 63180 Excel report...', key: 'excel-export' });
+
+            // Use the Excel export endpoint which generates a multi-tab workbook:
+            // - Overview (metadata + summary)
+            // - Major - Tangential Grid (polar detection matrix)
+            // - Major - Tangential Boundary (boundary measurements)
+            // - Major - Radial (radial motion data)
+            // - Cell count (15% rule validation)
+            const response = await api.get(`/api/export/excel/${testId}`, {
+                responseType: 'blob'
+            });
+
+            // Download Excel file
+            const blob = new Blob([response.data], {
+                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+
+            link.setAttribute('href', url);
+            link.setAttribute('download', `IEC63180_Test_${testId}_${test.test_name.replace(/\s+/g, '_')}.xlsx`);
+            link.style.visibility = 'hidden';
+
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            message.success({ content: 'IEC 63180 Excel report generated successfully', key: 'excel-export' });
+        } catch (err) {
+            console.error("Error exporting Excel:", err);
+            const axiosError = err as { response?: { data?: { error?: string } } };
+            message.error({ content: axiosError?.response?.data?.error ?? 'Failed to export Excel', key: 'excel-export' });
         }
     };
 
@@ -317,21 +435,28 @@ export default function HistoryPage() {
     };
 
     const getIndividualPhaseStatus = (phaseCompleted?: boolean, awaiting?: boolean, currentPhase?: string, phaseName?: string, testStatus?: string) => {
+        // Priority 1: Check if phase is completed
         if (phaseCompleted) {
             return { color: 'green', icon: <CheckCircleOutlined />, text: 'Finished' };
-        } else if (awaiting && (currentPhase === phaseName || !currentPhase)) {
-            return { color: 'gold', icon: <ClockCircleOutlined />, text: 'Awaiting Selection' };
-        } else if (currentPhase === phaseName && testStatus === 'IN_PROGRESS') {
-            return { color: 'blue', icon: <ClockCircleOutlined />, text: 'In Progress' };
-        } else if (currentPhase === phaseName && testStatus === 'PAUSED') {
-            return { color: 'orange', icon: <ClockCircleOutlined />, text: 'Paused' };
-        } else if (currentPhase === phaseName && testStatus === 'ERROR') {
-            return { color: 'red', icon: null, text: 'Error' };
-        } else if (currentPhase === phaseName) {
-            return { color: 'orange', icon: <ClockCircleOutlined />, text: 'Waiting to Resume' };
-        } else {
-            return { color: 'default', icon: null, text: 'Pending' };
         }
+
+        // Priority 2: Check if currently running this phase
+        if (currentPhase === phaseName && testStatus === 'IN_PROGRESS') {
+            return { color: 'blue', icon: <ClockCircleOutlined />, text: 'In Progress' };
+        }
+
+        // Priority 3: Check if awaiting selection for this phase
+        if (awaiting && (currentPhase === phaseName || !currentPhase)) {
+            return { color: 'gold', icon: <ClockCircleOutlined />, text: 'Awaiting Selection' };
+        }
+
+        // Priority 4: Check if test is paused on this phase
+        if (currentPhase === phaseName && testStatus === 'PAUSED') {
+            return { color: 'orange', icon: <PauseCircleOutlined />, text: 'Paused' };
+        }
+
+        // Default: Not started yet
+        return { color: 'default', icon: null, text: 'Pending' };
     };
 
     const renderExpandedContent = (item: TestWithState) => {
@@ -339,9 +464,10 @@ export default function HistoryPage() {
         const hasPosition = item.last_position_x !== undefined && item.last_position_y !== undefined;
 
         // Derive completion flags defensively (handles missing state flags)
+        // Also check if results exist as a fallback
         const boundaryCompleted = Boolean(item.boundary_detection_completed || (item.boundary_results?.length ?? 0) > 0);
-        const tangentialCompleted = Boolean(item.tangential_test_completed);
-        const radialCompleted = Boolean(item.radial_test_completed);
+        const tangentialCompleted = Boolean(item.tangential_test_completed || (item.tangential_results?.length ?? 0) > 0);
+        const radialCompleted = Boolean(item.radial_test_completed || (item.radial_results?.length ?? 0) > 0);
 
         // Get status for each phase
         const boundaryStatus = getIndividualPhaseStatus(
@@ -519,102 +645,108 @@ export default function HistoryPage() {
 
                 <Divider />
 
-                {/* Boundary Results */}
-                {item.boundary_results && item.boundary_results.length > 0 && (
-                    <div style={{ marginBottom: 16 }}>
-                        <Text strong style={{ fontSize: 16, display: 'block', marginBottom: 12 }}>
-                            <AimOutlined /> Boundary Detection Results
-                        </Text>
-
-                        {/* Summary Statistics */}
-                        <Row gutter={12} style={{ marginBottom: 16 }}>
-                            <Col xs={24} sm={8}>
-                                <Card size="small" style={{ background: '#f6ffed', border: '1px solid #b7eb8f' }}>
-                                    <Statistic
-                                        title="Detected"
-                                        value={item.boundary_results.filter((r: BoundaryResult) => r.detection_boundary !== null).length}
-                                        suffix={`/ ${item.boundary_results.length}`}
-                                        prefix={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
-                                        valueStyle={{ color: '#52c41a', fontSize: 20 }}
-                                    />
-                                </Card>
-                            </Col>
-                            <Col xs={24} sm={8}>
-                                <Card size="small" style={{ background: '#fff7e6', border: '1px solid #ffd591' }}>
-                                    <Statistic
-                                        title="Not Detected"
-                                        value={item.boundary_results.filter((r: BoundaryResult) => r.detection_boundary === null).length}
-                                        suffix={`/ ${item.boundary_results.length}`}
-                                        prefix={<CloseCircleOutlined style={{ color: '#faad14' }} />}
-                                        valueStyle={{ color: '#faad14', fontSize: 20 }}
-                                    />
-                                </Card>
-                            </Col>
-                            <Col xs={24} sm={8}>
-                                <Card size="small" style={{ background: '#e6f7ff', border: '1px solid #91d5ff' }}>
-                                    <Statistic
-                                        title="Avg. Distance"
-                                        value={(() => {
-                                            const detected = item.boundary_results.filter((r: BoundaryResult) => r.detection_boundary !== null);
-                                            if (detected.length === 0) return 0;
-                                            const sum = detected.reduce((acc: number, r: BoundaryResult) => acc + (r.detection_boundary || 0), 0);
-                                            return (sum / detected.length).toFixed(2);
-                                        })()}
-                                        suffix="m"
-                                        prefix={<EnvironmentOutlined style={{ color: '#1890ff' }} />}
-                                        valueStyle={{ color: '#1890ff', fontSize: 20 }}
-                                    />
-                                </Card>
-                            </Col>
-                        </Row>
-
-                        {/* Boundary Grid */}
-                        <div style={{
-                            background: '#fafafa',
-                            padding: '12px',
-                            borderRadius: 8,
-                            border: '1px solid #d9d9d9'
-                        }}>
-                            <div style={{ maxHeight: '300px', overflow: 'auto' }}>
-                                <Row gutter={[8, 8]}>
-                                    {item.boundary_results.map((result: BoundaryResult) => (
-                                        <Col xs={12} sm={8} md={6} lg={4} key={result.angle}>
-                                            <div style={{
-                                                background: result.detection_boundary ? '#f6ffed' : '#fff2e8',
-                                                border: result.detection_boundary ? '2px solid #52c41a' : '2px solid #ffd591',
-                                                padding: '10px',
-                                                borderRadius: 6,
-                                                textAlign: 'center',
-                                                transition: 'all 0.3s',
-                                                boxShadow: result.detection_boundary ? '0 2px 4px rgba(82, 196, 26, 0.2)' : '0 2px 4px rgba(255, 173, 20, 0.2)',
-                                                cursor: 'default'
-                                            }}>
-                                                <div style={{ marginBottom: 4 }}>
-                                                    <Text strong style={{ fontSize: 13, color: '#262626' }}>
-                                                        {result.angle}°
-                                                    </Text>
-                                                </div>
-                                                <div style={{ marginBottom: 4 }}>
-                                                    <Text style={{
-                                                        fontSize: 16,
-                                                        fontWeight: 600,
-                                                        color: result.detection_boundary ? '#52c41a' : '#999'
-                                                    }}>
-                                                        {result.detection_boundary ? `${result.detection_boundary.toFixed(2)}m` : 'N/A'}
-                                                    </Text>
-                                                </div>
-                                                {result.detection_boundary ? (
-                                                    <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 14 }} />
-                                                ) : (
-                                                    <CloseCircleOutlined style={{ color: '#faad14', fontSize: 14 }} />
-                                                )}
-                                            </div>
-                                        </Col>
-                                    ))}
-                                </Row>
-                            </div>
-                        </div>
-                    </div>
+                {/* Test Results Tabs */}
+                {((item.boundary_results && item.boundary_results.length > 0) ||
+                  (item.tangential_results && item.tangential_results.length > 0) ||
+                  (item.radial_results && item.radial_results.length > 0)) && (
+                    <Card style={{ marginBottom: 16 }}>
+                        <Tabs
+                            defaultActiveKey="boundary"
+                            items={[
+                                {
+                                    key: 'boundary',
+                                    label: `Boundary (${item.boundary_results?.length || 0})`,
+                                    children: item.boundary_results && item.boundary_results.length > 0 ? (
+                                        <div style={{ maxHeight: '400px', overflow: 'auto' }}>
+                                            <Row gutter={[8, 8]}>
+                                                {item.boundary_results.map((result: BoundaryResult, idx: number) => (
+                                                    <Col xs={12} sm={8} md={6} lg={4} key={idx}>
+                                                        <Card
+                                                            size="small"
+                                                            style={{
+                                                                background: result.detection_boundary !== null ? '#f6ffed' : '#fff2e8',
+                                                                border: result.detection_boundary !== null ? '1px solid #b7eb8f' : '1px solid #ffd591'
+                                                            }}
+                                                        >
+                                                            <Statistic
+                                                                title={`${result.angle}°`}
+                                                                value={result.detection_boundary !== null ? result.detection_boundary.toFixed(2) : 'N/A'}
+                                                                suffix={result.detection_boundary !== null ? "m" : ""}
+                                                                valueStyle={{ fontSize: 14 }}
+                                                            />
+                                                        </Card>
+                                                    </Col>
+                                                ))}
+                                            </Row>
+                                        </div>
+                                    ) : <Empty description="No boundary data" />
+                                },
+                                {
+                                    key: 'tangential',
+                                    label: `Tangential (${item.tangential_results?.length || 0})`,
+                                    children: item.tangential_results && item.tangential_results.length > 0 ? (
+                                        <div style={{ maxHeight: '400px', overflow: 'auto' }}>
+                                            <Row gutter={[8, 8]}>
+                                                {item.tangential_results.map((result: TangentialResult, idx: number) => (
+                                                    <Col xs={12} sm={8} md={6} lg={4} key={idx}>
+                                                        <Card
+                                                            size="small"
+                                                            style={{
+                                                                background: result.detected ? '#f6ffed' : '#fff2e8',
+                                                                border: result.detected ? '1px solid #b7eb8f' : '1px solid #ffd591'
+                                                            }}
+                                                        >
+                                                            <Statistic
+                                                                title={`${result.angle.toFixed(1)}°`}
+                                                                value={result.distance.toFixed(2)}
+                                                                suffix="m"
+                                                                valueStyle={{ fontSize: 14 }}
+                                                            />
+                                                        </Card>
+                                                    </Col>
+                                                ))}
+                                            </Row>
+                                        </div>
+                                    ) : <Empty description="No tangential data" />
+                                },
+                                {
+                                    key: 'radial',
+                                    label: `Radial (${item.radial_results?.length || 0})`,
+                                    children: item.radial_results && item.radial_results.length > 0 ? (
+                                        <div style={{ maxHeight: '400px', overflow: 'auto' }}>
+                                            <Row gutter={[8, 8]}>
+                                                {item.radial_results.map((result: RadialResult, idx: number) => (
+                                                    <Col xs={12} sm={8} md={6} lg={4} key={idx}>
+                                                        <Card
+                                                            size="small"
+                                                            style={{
+                                                                background: result.detected ? '#f6ffed' : '#fff2e8',
+                                                                border: result.detected ? '1px solid #b7eb8f' : '1px solid #ffd591'
+                                                            }}
+                                                        >
+                                                            <div style={{ textAlign: 'center' }}>
+                                                                <Text strong style={{ fontSize: 13 }}>{result.angle}°</Text>
+                                                                <div>
+                                                                    <Text style={{ fontSize: 16, fontWeight: 600 }}>
+                                                                        {result.distance.toFixed(2)}m
+                                                                    </Text>
+                                                                </div>
+                                                                <div style={{ marginTop: 4 }}>
+                                                                    <Tag color={result.offset_from_boundary > 0 ? 'blue' : 'orange'}>
+                                                                        {result.offset_from_boundary > 0 ? '+' : ''}{result.offset_from_boundary.toFixed(1)}m
+                                                                    </Tag>
+                                                                </div>
+                                                            </div>
+                                                        </Card>
+                                                    </Col>
+                                                ))}
+                                            </Row>
+                                        </div>
+                                    ) : <Empty description="No radial data" />
+                                }
+                            ]}
+                        />
+                    </Card>
                 )}
 
                 {/* Last Position */}
@@ -727,7 +859,7 @@ export default function HistoryPage() {
     };
 
     return (
-        <Layout>
+        <Layout style={{ minHeight: "100vh" }}>
             <Header
                 style={{
                     position: "sticky",
@@ -753,7 +885,16 @@ export default function HistoryPage() {
                     </Button>
                 </div>
 
-                <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
+                <div
+                    style={{
+                        position: "absolute",
+                        left: "50%",
+                        transform: "translateX(-50%)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                    }}
+                >
                     <Space>
                         <div
                             style={{
@@ -765,8 +906,7 @@ export default function HistoryPage() {
                                 borderRadius: 4,
                             }}
                         />
-                        <Text>RoboControl-X1</Text>
-                        <Tag color="green" style={{ borderRadius: 999 }}>Connected</Tag>
+                        <Text>Test History</Text>
                     </Space>
                 </div>
 
@@ -780,9 +920,6 @@ export default function HistoryPage() {
                     background: "#f5f5f5",
                 }}
             >
-                <Title level={2} style={{ textAlign: "center", marginTop: 24, marginBottom: 16 }}>
-                    Test History
-                </Title>
 
                 <div style={{ maxWidth: 960, margin: "0 auto", padding: 16 }}>
                     {loading ? (
@@ -795,11 +932,13 @@ export default function HistoryPage() {
                         <Space direction="vertical" size={12} style={{ width: "100%" }}>
                             {items.map(item => {
                                 const isExpanded = expandedKeys.includes(item.test_id?.toString() || '');
-                                const phasesComplete = Boolean(
-                                    item.boundary_detection_completed &&
-                                    item.tangential_test_completed &&
-                                    item.radial_test_completed
-                                );
+
+                                // Check completion using same logic as phase status display
+                                const boundaryCompleted = Boolean(item.boundary_detection_completed || (item.boundary_results?.length ?? 0) > 0);
+                                const tangentialCompleted = Boolean(item.tangential_test_completed || (item.tangential_results?.length ?? 0) > 0);
+                                const radialCompleted = Boolean(item.radial_test_completed || (item.radial_results?.length ?? 0) > 0);
+
+                                const phasesComplete = boundaryCompleted && tangentialCompleted && radialCompleted;
                                 const canExport = phasesComplete && item.status === 'COMPLETED';
 
                                 return (
@@ -863,7 +1002,7 @@ export default function HistoryPage() {
                                                                 Continue
                                                             </Button>
                                                         )}
-                                                        <Button onClick={() => handleContinue(item)}>
+                                                        <Button onClick={() => handleView(item)}>
                                                             View
                                                         </Button>
                                                         <Button
@@ -872,7 +1011,16 @@ export default function HistoryPage() {
                                                             disabled={!canExport}
                                                             title={!canExport ? "Complete all phases to enable CSV export" : undefined}
                                                         >
-                                                            Export CSV
+                                                            CSV
+                                                        </Button>
+                                                        <Button
+                                                            type="primary"
+                                                            icon={<DownloadOutlined />}
+                                                            onClick={() => handleExportExcel(item)}
+                                                            disabled={!canExport}
+                                                            title={!canExport ? "Complete all phases to enable Excel export" : "Download IEC 63180 Excel Report"}
+                                                        >
+                                                            Excel
                                                         </Button>
                                                         <Popconfirm
                                                             title="Delete this test?"

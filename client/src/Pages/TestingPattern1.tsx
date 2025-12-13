@@ -1,4 +1,4 @@
-import { Layout, Button, Space, Tag, Typography, Card, Progress, List, Statistic, Row, Col, Modal, Steps } from "antd";
+import { Layout, Button, Space, Tag, Typography, Card, Progress, List, Statistic, Row, Col, Modal, Steps, message } from "antd";
 import { LeftOutlined, CheckCircleOutlined, ClockCircleOutlined, DownloadOutlined } from "@ant-design/icons";
 import { useNavigate, useLocation, Navigate } from "react-router-dom";
 import type { Test } from "../Types/test.ts"
@@ -7,6 +7,7 @@ import { useMasterTest } from "../Hooks/useMasterTest.tsx";
 import { useEffect, useState } from "react";
 import { api } from "../Components/apiAxios";
 import GridHeatmap from "../Components/GridHeatmap";
+import { InitialPositionDialog, type InitialPosition } from "../Components/InitialPositionDialog";
 
 const { Text, Title } = Typography;
 const { Header, Content } = Layout;
@@ -117,7 +118,7 @@ function formatEventData(event: any): string {
         case 'compliance_measurement_completed':
             if (data.angle !== undefined && data.distance !== undefined) {
                 const detected = data.detected ? '✓ Detected' : '✗ No detection';
-                const offset = data.offset_from_boundary ? ` (${data.offset_from_boundary.toFixed(1)}m inside boundary)` : '';
+                const offset = (data.offset_from_boundary !== undefined && data.offset_from_boundary !== null) ? ` (${data.offset_from_boundary.toFixed(1)}m inside boundary)` : '';
                 return `Angle ${data.angle}°, distance ${data.distance}m${offset}: ${detected}`;
             }
             return 'Measurement completed';
@@ -210,7 +211,7 @@ type TelemetrySample = {
 export default function TestingPattern1() {
     const navigate = useNavigate();
     const { state: locationState } = useLocation();
-    const data = locationState as (Test | TestDB & { resuming?: boolean }) | undefined;
+    const data = locationState as (Test | TestDB & { resuming?: boolean; viewOnly?: boolean }) | undefined;
 
     // All hooks must be called before any conditional returns
     const {
@@ -241,6 +242,8 @@ export default function TestingPattern1() {
 
     const [confirmModalOpen, setConfirmModalOpen] = useState(false);
     const [latestTelemetry, setLatestTelemetry] = useState<TelemetrySample | null>(null);
+    const [showPositionDialog, setShowPositionDialog] = useState(false);
+    const [initialPosition, setInitialPosition] = useState<InitialPosition | null>(null);
 
     // Derived state (safe to use data here because hooks are already called)
     const liveStatus = status || data?.status || 'PLANNED';
@@ -343,14 +346,20 @@ export default function TestingPattern1() {
             if (data?.test_id) {
                 // Load historical data first to show what's been done
                 if (data.status && data.status !== 'PLANNED') {
-                    await loadTestHistory(data.test_id);
+                    const viewOnly = (data as any).viewOnly || false;
+                    await loadTestHistory(data.test_id, viewOnly);
+
+                    // If view-only, show message
+                    if (viewOnly) {
+                        message.info("Viewing historical test data (read-only)");
+                    }
                 }
             }
         };
 
         loadTestState();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [data?.test_id]); // loadTestHistory is stable from hook
+    }, [data?.test_id, (data as any)?.viewOnly]); // loadTestHistory is stable from hook
 
     // Early return after all hooks
     if (!data) return <Navigate to="/controlpanel" replace />;
@@ -430,8 +439,14 @@ export default function TestingPattern1() {
             return;
         }
 
-        console.log("✅ Opening confirmation modal...");
-        setConfirmModalOpen(true);
+        // Check if we have initial position, if not show position dialog first
+        if (!initialPosition) {
+            console.log("📍 No initial position set - showing position dialog...");
+            setShowPositionDialog(true);
+        } else {
+            console.log("✅ Opening confirmation modal...");
+            setConfirmModalOpen(true);
+        }
     };
 
     const handleConfirmStart = async () => {
@@ -444,6 +459,7 @@ export default function TestingPattern1() {
 
         try {
             console.log("📡 Calling startTest API...");
+            console.log("📍 Initial Position:", initialPosition);
             await startTest({
                 test_id: data.test_id,
                 sensor_id: data.sensor_id,
@@ -457,7 +473,10 @@ export default function TestingPattern1() {
                 // Timing - IEC 63180 compliant
                 movement_speed: 50,             // 0.5 m/s
                 detection_wait_time: 2000,      // 2 second wait
-                repeat_measurements: 2          // 2 attempts per position
+                repeat_measurements: 2,         // 2 attempts per position
+
+                // Initial position (if provided)
+                initial_position: initialPosition || undefined
             });
             console.log("✅ Test started successfully!");
             setConfirmModalOpen(false);
@@ -545,7 +564,7 @@ export default function TestingPattern1() {
         const csv = [
             'Angle (degrees),Detection Boundary (m),Detected Distance (m),No Detection Distance (m)',
             ...boundaryResults.map(r =>
-                `${r.angle},${r.detected ? 'Yes' : 'No'},${r.distance}`
+                `${r.angle},${r.detection_boundary !== null ? r.detection_boundary : 'N/A'},${r.detected_distance !== null ? r.detected_distance : 'N/A'},${r.no_detection_distance !== null ? r.no_detection_distance : 'N/A'}`
             )
         ].join('\n');
         downloadCSV(`${data.test_name}_boundary_results.csv`, csv);
@@ -606,7 +625,7 @@ export default function TestingPattern1() {
             '=== BOUNDARY DETECTION RESULTS ===',
             'Angle (degrees),Detection Boundary (m),Detected Distance (m),No Detection Distance (m)',
             ...boundaryResults.map(r =>
-                `${r.angle},${r.detected ? 'Yes' : 'No'},${r.distance}`
+                `${r.angle},${r.detection_boundary !== null ? r.detection_boundary : 'N/A'},${r.detected_distance !== null ? r.detected_distance : 'N/A'},${r.no_detection_distance !== null ? r.no_detection_distance : 'N/A'}`
             ),
             '',
             '=== TANGENTIAL TEST RESULTS ===',
@@ -645,7 +664,7 @@ export default function TestingPattern1() {
     };
 
     return (
-        <Layout>
+        <Layout style={{ minHeight: "100vh" }}>
             <Header
                 style={{
                     position: "sticky",
@@ -658,7 +677,8 @@ export default function TestingPattern1() {
                     justifyContent: "space-between",
                     paddingInline: 24,
                     boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-                }}>
+                }}
+            >
                 <div style={{ flex: 1 }}>
                     <Button
                         type="link"
@@ -670,24 +690,59 @@ export default function TestingPattern1() {
                     </Button>
                 </div>
 
-                <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)" }}>
+                <div
+                    style={{
+                        position: "absolute",
+                        left: "50%",
+                        transform: "translateX(-50%)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                    }}
+                >
                     <Space>
-                        <div style={{ background: "#1677ff", color: "#fff", padding: "4px", height: "20px", width: "20px" }} />
-                        <Text>RoboControl-X1</Text>
-                        <Tag color={getStatusColor()} style={{ borderRadius: "99px" }}>
+                        <div
+                            style={{
+                                background: "#1677ff",
+                                color: "#fff",
+                                padding: "4px",
+                                height: "20px",
+                                width: "20px",
+                                borderRadius: 4,
+                            }}
+                        />
+                        <Text>{data.test_name}</Text>
+                        <Tag color={getStatusColor()} style={{ borderRadius: 999 }}>
                             {getStatusDisplay()}
-                        </Tag>
-                        <Tag color={getPhaseColor()}>
-                            {getPhaseDisplay()}
-                        </Tag>
-                        <Tag color={connected ? "green" : "red"}>
-                            {connected ? "●" : "○"} SSE
                         </Tag>
                     </Space>
                 </div>
 
-                <div style={{ flex: 1, display: "flex", justifyContent: "right" }}>
-                    <Space>
+                <div style={{ flex: 1 }} />
+            </Header>
+
+            {/* Test Control Bar - Below Header */}
+            <div style={{
+                position: "sticky",
+                top: 56,
+                zIndex: 9,
+                background: "#fafafa",
+                borderBottom: "1px solid #f0f0f0",
+                padding: "12px 24px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between"
+            }}>
+                <Space size="small">
+                    <Tag color={getPhaseColor()}>
+                        {getPhaseDisplay()}
+                    </Tag>
+                    <Tag color={connected ? "green" : "red"}>
+                        {connected ? "●" : "○"} SSE
+                    </Tag>
+                </Space>
+
+                <Space>
                         {/* Start button only before boundary is done */}
                         {!isRunning && !isPaused && !isCompleted && !boundaryComplete && (
                             <Button color="primary" variant="solid" onClick={handleStart}>
@@ -758,11 +813,10 @@ export default function TestingPattern1() {
                                 </Button>
                             </>
                         )}
-                    </Space>
-                </div>
-            </Header>
+                </Space>
+            </div>
 
-            <Content style={{ height: '100vh', padding: 24, background: '#f5f5f5', overflow: 'auto' }}>
+            <Content style={{ height: 'calc(100vh - 56px - 49px)', padding: 24, background: '#f5f5f5', overflow: 'auto' }}>
                 <div style={{ textAlign: "center", marginBottom: 24 }}>
                     <Title level={2}>{data.test_name}</Title>
                     <Text>Two-phase boundary detection and tangential/radial testing</Text>
@@ -1229,7 +1283,7 @@ export default function TestingPattern1() {
                             distance: r.distance
                         }))}
                         cellSize={0.5}
-                        maxRadius={6}
+                        autoAdaptRadius={true}
                     />
                 )}
 
@@ -1281,7 +1335,7 @@ export default function TestingPattern1() {
                                                 prefix={result.detected ? <CheckCircleOutlined style={{ color: '#52c41a' }} /> : null}
                                                 valueStyle={{ fontSize: 14 }}
                                             />
-                                            {result.offset_from_boundary !== undefined && (
+                                            {result.offset_from_boundary !== undefined && result.offset_from_boundary !== null && (
                                                 <Text type="secondary" style={{ fontSize: 11 }}>
                                                     {result.offset_from_boundary.toFixed(1)}m inside boundary
                                                 </Text>
@@ -1342,7 +1396,7 @@ export default function TestingPattern1() {
                                                 prefix={result.detected ? <CheckCircleOutlined style={{ color: '#52c41a' }} /> : null}
                                                 valueStyle={{ fontSize: 14 }}
                                             />
-                                            {result.offset_from_boundary !== undefined && (
+                                            {result.offset_from_boundary !== undefined && result.offset_from_boundary !== null && (
                                                 <Text type="secondary" style={{ fontSize: 11 }}>
                                                     {result.offset_from_boundary.toFixed(1)}m inside boundary
                                                 </Text>
@@ -1419,6 +1473,22 @@ export default function TestingPattern1() {
                     </p>
                 </div>
             </Modal>
+
+            {/* Initial Position Dialog */}
+            <InitialPositionDialog
+                visible={showPositionDialog}
+                onConfirm={(position) => {
+                    console.log("📍 Position confirmed:", position);
+                    setInitialPosition(position);
+                    setShowPositionDialog(false);
+                    // After setting position, show confirmation modal
+                    setConfirmModalOpen(true);
+                }}
+                onCancel={() => {
+                    console.log("📍 Position dialog cancelled");
+                    setShowPositionDialog(false);
+                }}
+            />
         </Layout>
     );
 }

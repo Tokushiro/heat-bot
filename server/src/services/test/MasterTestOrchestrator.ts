@@ -73,6 +73,11 @@ export interface MasterTestConfiguration {
     movement_speed?: number;
     detection_wait_time?: number;
     repeat_measurements?: number;
+    initial_position?: {
+        distanceFromSensor: number;
+        facingAngle: number;
+        robotOrientation: 'tangential' | 'radial';
+    };
 }
 
 export interface TestState {
@@ -85,6 +90,11 @@ export interface TestState {
     last_position_x?: number;
     last_position_y?: number;
     last_position_timestamp?: Date;
+    initial_position?: {
+        distanceFromSensor: number;
+        facingAngle: number;
+        robotOrientation: 'tangential' | 'radial';
+    };
     progress: {
         phase: string;
         total: number;
@@ -229,6 +239,7 @@ export class MasterTestOrchestrator extends EventEmitter {
                 tangential_results_count: 0,
                 radial_results_count: 0,
                 completed_step_count: 0,
+                initial_position: config.initial_position,
                 progress: {
                     phase: 'BOUNDARY_DETECTION',
                     total: IEC_BOUNDARY_ANGLES.length, // 36 angles with stepped approach

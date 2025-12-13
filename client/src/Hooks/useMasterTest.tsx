@@ -33,6 +33,11 @@ export interface MasterTestConfiguration {
     movement_speed?: number;
     detection_wait_time?: number;
     repeat_measurements?: number;
+    initial_position?: {
+        distanceFromSensor: number;
+        facingAngle: number;
+        robotOrientation: 'tangential' | 'radial';
+    };
 }
 
 export interface BoundaryResult {
@@ -439,31 +444,97 @@ export function useMasterTest() {
         }
     }, []);
 
-    const loadTestHistory = useCallback(async (test_id: number) => {
+    const loadTestHistory = useCallback(async (test_id: number, viewOnly: boolean = false) => {
         try {
-            // Load test data from database
-            const response = await api.get(`/api/test/${test_id}`);
-            const test = response.data;
+            console.log(`[useMasterTest] Loading test history for test ${test_id}, viewOnly=${viewOnly}`);
+
+            // 1. Load test metadata
+            const testResponse = await api.get(`/api/test/${test_id}`);
+            const test = testResponse.data;
 
             setTestId(test_id);
 
-            // Map database status to execution state
+            // 2. Load test state (includes boundary results)
+            const stateResponse = await api.get(`/api/test/${test_id}/state`);
+            const state = stateResponse.data;
+
+            // 3. Load boundary results
+            if (state.boundary_results) {
+                const parsed = typeof state.boundary_results === 'string'
+                    ? JSON.parse(state.boundary_results)
+                    : state.boundary_results;
+                setBoundaryResults(parsed || []);
+            }
+
+            // 4. Load tangential results (compliance steps with type GRID_TANGENTIAL)
+            try {
+                const tangentialResponse = await api.get(`/api/test/${test_id}/steps`, {
+                    params: { step_type: 'GRID_TANGENTIAL' }
+                });
+
+                const tangentialData = tangentialResponse.data.map((step: any) => ({
+                    angle: step.angle,
+                    distance: step.distance_1,
+                    detected: step.detection_final,
+                    offset_from_boundary: null
+                }));
+                setTangentialResults(tangentialData);
+            } catch (err) {
+                console.warn("[useMasterTest] No tangential results found");
+                setTangentialResults([]);
+            }
+
+            // 5. Load radial results (compliance steps with type COMPLIANCE_RADIAL)
+            try {
+                const radialResponse = await api.get(`/api/test/${test_id}/steps`, {
+                    params: { step_type: 'COMPLIANCE_RADIAL' }
+                });
+
+                const radialData = radialResponse.data.map((step: any) => ({
+                    angle: step.angle,
+                    distance: step.distance_1,
+                    detected: step.detection_final,
+                    offset_from_boundary: step.distance_2
+                }));
+                setRadialResults(radialData);
+            } catch (err) {
+                console.warn("[useMasterTest] No radial results found");
+                setRadialResults([]);
+            }
+
+            // 6. Set execution state based on current phase and status
+            const currentPhase = state.current_phase || test.test_phase;
+
             if (test.status === 'COMPLETED') {
                 setExecutionState(TestExecutionState.ALL_COMPLETE);
             } else if (test.status === 'ERROR') {
                 setExecutionState(TestExecutionState.ERROR);
             } else if (test.status === 'PAUSED') {
-                // Determine which phase based on state data
-                // This is a simplified approach - you may need to fetch state_data to be more precise
-                setExecutionState(TestExecutionState.BOUNDARY_PAUSED);
+                // Determine correct paused state based on current phase
+                if (currentPhase === 'BOUNDARY_DETECTION') {
+                    setExecutionState(TestExecutionState.BOUNDARY_PAUSED);
+                } else if (currentPhase === 'TANGENTIAL_TEST') {
+                    setExecutionState(TestExecutionState.TANGENTIAL_PAUSED);
+                } else if (currentPhase === 'RADIAL_TEST') {
+                    setExecutionState(TestExecutionState.RADIAL_PAUSED);
+                } else {
+                    setExecutionState(TestExecutionState.IDLE);
+                }
+            } else if (test.status === 'IN_PROGRESS') {
+                if (currentPhase === 'BOUNDARY_DETECTION') {
+                    setExecutionState(TestExecutionState.BOUNDARY_RUNNING);
+                } else if (currentPhase === 'TANGENTIAL_TEST') {
+                    setExecutionState(TestExecutionState.TANGENTIAL_RUNNING);
+                } else if (currentPhase === 'RADIAL_TEST') {
+                    setExecutionState(TestExecutionState.RADIAL_RUNNING);
+                }
             } else {
                 setExecutionState(TestExecutionState.IDLE);
             }
 
-            // Load test results (boundary, tangential, radial)
-            // This is a simplified implementation - enhance as needed
-            message.success("Test history loaded");
+            message.success(viewOnly ? "Test history loaded" : "Test resumed");
         } catch (error: any) {
+            console.error("[useMasterTest] Failed to load test history:", error);
             message.error("Failed to load test history");
         }
     }, []);

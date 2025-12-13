@@ -20,6 +20,7 @@ export interface GridHeatmapProps {
     maxRadius?: number;       // meters (default 6)
     width?: number;           // pixels (default 600)
     height?: number;          // pixels (default 600)
+    autoAdaptRadius?: boolean; // Auto-adapt radius based on data (default false)
 }
 
 export const GridHeatmap: React.FC<GridHeatmapProps> = ({
@@ -27,11 +28,26 @@ export const GridHeatmap: React.FC<GridHeatmapProps> = ({
     cellSize = 0.5,
     maxRadius = 6,
     width = 600,
-    height = 600
+    height = 600,
+    autoAdaptRadius = false
 }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [hoveredCell, setHoveredCell] = useState<GridCellData | null>(null);
     const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
+
+    // Auto-calculate max radius if enabled
+    let effectiveMaxRadius = maxRadius;
+
+    if (autoAdaptRadius && data.length > 0) {
+        // Find max distance in data
+        const maxDataRadius = Math.max(...data.map(cell => cell.distance));
+
+        // Add 10% buffer and round up to nearest 0.5m
+        const bufferedRadius = maxDataRadius * 1.1;
+        effectiveMaxRadius = Math.ceil(bufferedRadius * 2) / 2;  // Round to nearest 0.5m
+
+        console.log(`[GridHeatmap] Auto-adapted radius: ${maxDataRadius.toFixed(2)}m → ${effectiveMaxRadius}m (with 10% buffer)`);
+    }
 
     // Calculate canvas parameters
     const padding = 50;
@@ -39,7 +55,7 @@ export const GridHeatmap: React.FC<GridHeatmapProps> = ({
     const chartHeight = height - (padding * 2);
     const centerX = padding + chartWidth / 2;
     const centerY = padding + chartHeight / 2;
-    const scale = Math.min(chartWidth, chartHeight) / (maxRadius * 2);
+    const scale = Math.min(chartWidth, chartHeight) / (effectiveMaxRadius * 2);
 
     // Convert world coordinates (meters) to canvas coordinates (pixels)
     const worldToCanvas = (x: number, y: number): { cx: number; cy: number } => {
@@ -94,7 +110,7 @@ export const GridHeatmap: React.FC<GridHeatmapProps> = ({
         ctx.lineWidth = 1;
 
         // Vertical grid lines
-        for (let x = -maxRadius; x <= maxRadius; x += cellSize) {
+        for (let x = -effectiveMaxRadius; x <= effectiveMaxRadius; x += cellSize) {
             const { cx } = worldToCanvas(x, 0);
             ctx.beginPath();
             ctx.moveTo(cx, padding);
@@ -103,7 +119,7 @@ export const GridHeatmap: React.FC<GridHeatmapProps> = ({
         }
 
         // Horizontal grid lines
-        for (let y = -maxRadius; y <= maxRadius; y += cellSize) {
+        for (let y = -effectiveMaxRadius; y <= effectiveMaxRadius; y += cellSize) {
             const { cy } = worldToCanvas(0, y);
             ctx.beginPath();
             ctx.moveTo(padding, cy);
@@ -133,7 +149,7 @@ export const GridHeatmap: React.FC<GridHeatmapProps> = ({
         ctx.textAlign = "center";
 
         // X-axis labels
-        for (let x = -maxRadius; x <= maxRadius; x += 1) {
+        for (let x = -effectiveMaxRadius; x <= effectiveMaxRadius; x += 1) {
             if (x === 0) continue;
             const { cx } = worldToCanvas(x, 0);
             ctx.fillText(`${x}m`, cx, centerY + 20);
@@ -141,7 +157,7 @@ export const GridHeatmap: React.FC<GridHeatmapProps> = ({
 
         // Y-axis labels
         ctx.textAlign = "right";
-        for (let y = -maxRadius; y <= maxRadius; y += 1) {
+        for (let y = -effectiveMaxRadius; y <= effectiveMaxRadius; y += 1) {
             if (y === 0) continue;
             const { cy } = worldToCanvas(0, y);
             ctx.fillText(`${y}m`, centerX - 10, cy + 4);
@@ -205,7 +221,7 @@ export const GridHeatmap: React.FC<GridHeatmapProps> = ({
             );
         }
 
-    }, [data, cellSize, maxRadius, width, height, centerX, centerY, scale, hoveredCell, padding]);
+    }, [data, cellSize, maxRadius, autoAdaptRadius, width, height, centerX, centerY, scale, hoveredCell, padding, effectiveMaxRadius]);
 
     // Handle mouse move for hover
     const handleMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
