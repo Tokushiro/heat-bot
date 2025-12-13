@@ -68,6 +68,7 @@ CREATE TABLE test_state (
                             test_id INTEGER PRIMARY KEY,
 
                             current_phase VARCHAR(30) NOT NULL,
+                            execution_state VARCHAR(30) DEFAULT 'IDLE',
                             boundary_results JSONB,
                             awaiting_confirmation BOOLEAN DEFAULT FALSE,
 
@@ -91,11 +92,13 @@ CREATE TABLE test_state (
 );
 
 CREATE INDEX idx_test_state_phase ON test_state (current_phase, awaiting_confirmation);
+CREATE INDEX idx_test_state_execution_state ON test_state (execution_state);
 CREATE INDEX idx_test_state_updated ON test_state (updated_at);
 CREATE INDEX idx_test_state_position ON test_state (last_position_x, last_position_y);
 
 COMMENT ON TABLE test_state IS 'Test execution state with physical robot position for resume';
 COMMENT ON COLUMN test_state.current_phase IS 'Current test phase: BOUNDARY_DETECTION, TANGENTIAL_TEST, RADIAL_TEST, COMPLETED';
+COMMENT ON COLUMN test_state.execution_state IS 'Test execution state: IDLE, BOUNDARY_RUNNING, BOUNDARY_PAUSED, BOUNDARY_COMPLETE, TANGENTIAL_RUNNING, TANGENTIAL_PAUSED, TANGENTIAL_COMPLETE, RADIAL_RUNNING, RADIAL_PAUSED, RADIAL_COMPLETE, ALL_COMPLETE, ERROR';
 
 -- ============================================================
 --  TEST STEP
@@ -109,6 +112,8 @@ CREATE TABLE test_step (
                            angle            FLOAT,
                            cell_row         INT,
                            cell_col         INT,
+                           cell_x           DOUBLE PRECISION,
+                           cell_y           DOUBLE PRECISION,
 
                            distance_1       DOUBLE PRECISION,
                            distance_2       DOUBLE PRECISION,
@@ -134,9 +139,15 @@ CREATE TABLE test_step (
 CREATE INDEX idx_test_step_test_status
     ON test_step (test_id, step_type, status, sequence_no);
 
+CREATE INDEX idx_test_step_grid_coordinates
+    ON test_step (cell_x, cell_y)
+    WHERE cell_x IS NOT NULL AND cell_y IS NOT NULL;
+
 COMMENT ON TABLE test_step IS 'Individual measurements within a test';
-COMMENT ON COLUMN test_step.step_type IS 'Step type: BOUNDARY_DETECTION_RADIAL, COMPLIANCE_TANGENTIAL, COMPLIANCE_RADIAL';
+COMMENT ON COLUMN test_step.step_type IS 'Step type: BOUNDARY_DETECTION_TANGENTIAL, GRID_TANGENTIAL, COMPLIANCE_RADIAL';
 COMMENT ON COLUMN test_step.angle IS 'Angle in degrees (0-360)';
+COMMENT ON COLUMN test_step.cell_x IS 'Grid cell center X coordinate in meters (for GRID_TANGENTIAL tests)';
+COMMENT ON COLUMN test_step.cell_y IS 'Grid cell center Y coordinate in meters (for GRID_TANGENTIAL tests)';
 COMMENT ON COLUMN test_step.detection_occurred IS 'Detection at this step (true/false)';
 
 -- ============================================================
@@ -449,4 +460,33 @@ SELECT
 FROM dead_time_log
 GROUP BY test_id, reason
 ORDER BY test_id, total_duration_ms DESC;
+
+ALTER TABLE test_state
+    ADD COLUMN execution_state VARCHAR(30) DEFAULT 'IDLE';
+
+COMMENT ON COLUMN test_state.execution_state IS 'Test execution state: IDLE, BOUNDARY_RUNNING, BOUNDARY_PAUSED, BOUNDARY_COMPLETE, TANGENTIAL_RUNNING, TANGENTIAL_PAUSED, TANGENTIAL_COMPLETE, RADIAL_RUNNING, RADIAL_PAUSED, RADIAL_COMPLETE, ALL_COMPLETE, ERROR';
+
+-- Add grid cell coordinate columns to test_step table
+-- These store the actual metric coordinates (in meters) of grid cell centers
+-- Separate from cell_row/cell_col which are integer grid indices
+ALTER TABLE test_step
+    ADD COLUMN cell_x DOUBLE PRECISION,
+    ADD COLUMN cell_y DOUBLE PRECISION;
+
+COMMENT ON COLUMN test_step.cell_x IS 'Grid cell center X coordinate in meters (for GRID_TANGENTIAL tests)';
+COMMENT ON COLUMN test_step.cell_y IS 'Grid cell center Y coordinate in meters (for GRID_TANGENTIAL tests)';
+
+-- Create index on grid coordinates for spatial queries
+CREATE INDEX idx_test_step_grid_coordinates
+    ON test_step (cell_x, cell_y)
+    WHERE cell_x IS NOT NULL AND cell_y IS NOT NULL;
+
+-- Create index on execution_state for filtering
+CREATE INDEX idx_test_state_execution_state
+    ON test_state (execution_state);
+
+-- Update existing records to have IDLE state
+UPDATE test_state
+SET execution_state = 'IDLE'
+WHERE execution_state IS NULL;
 

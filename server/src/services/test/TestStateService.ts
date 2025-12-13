@@ -101,8 +101,8 @@ export async function getTestSteps(
  * Returns array of measurement results with angle, distance, offset, and detected status
  */
 export async function getComplianceResults(testId: number, testType: 'TANGENTIAL' | 'RADIAL') {
-    // Map test type to step_type in database
-    const stepType = testType === 'TANGENTIAL' ? 'TANGENTIAL_SWEEP' : 'RADIAL_COMPLIANCE';
+    // Map test type to step_type in database (aligned with orchestrator naming)
+    const stepType = testType === 'TANGENTIAL' ? 'COMPLIANCE_TANGENTIAL' : 'COMPLIANCE_RADIAL';
 
     const result = await pool.query(
         `SELECT

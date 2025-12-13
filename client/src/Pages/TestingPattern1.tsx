@@ -1,4 +1,4 @@
-import { Layout, Button, Space, Tag, Typography, Card, Progress, List, Statistic, Row, Col, Modal, Steps } from "antd";
+import { Layout, Button, Space, Tag, Typography, Card, Progress, List, Statistic, Row, Col, Modal, Steps, message } from "antd";
 import { LeftOutlined, CheckCircleOutlined, ClockCircleOutlined, DownloadOutlined } from "@ant-design/icons";
 import { useNavigate, useLocation, Navigate } from "react-router-dom";
 import type { Test } from "../Types/test.ts"
@@ -6,6 +6,8 @@ import type { TestDB } from "../Components/testCard.tsx";
 import { useMasterTest } from "../Hooks/useMasterTest.tsx";
 import { useEffect, useState } from "react";
 import { api } from "../Components/apiAxios";
+import GridHeatmap from "../Components/GridHeatmap";
+import { InitialPositionDialog, type InitialPosition } from "../Components/InitialPositionDialog";
 
 const { Text, Title } = Typography;
 const { Header, Content } = Layout;
@@ -40,6 +42,9 @@ function formatEventType(eventType: string): string {
         case 'compliance_test_started': return 'Tangential/Radial Test Started'; // Legacy
         case 'compliance_measurement_completed': return 'Tangential/Radial Measurement';
         case 'movement_started': return 'Movement Started';
+        case 'movement_completed': return 'Movement Complete';
+        case 'boundary_step_started': return 'Boundary Step Started';
+        case 'boundary_step_completed': return 'Boundary Step Complete';
         case 'measurement_completed': return 'Measurement Complete';
         case 'detection': return 'Detection Event';
         case 'phase_progress': return 'Progress Update';
@@ -62,11 +67,39 @@ function formatEventData(event: any): string {
             return `Angle ${data.angle}°: No boundary detected`;
 
         case 'movement_started':
-            if (data.angle !== undefined && data.distance !== undefined) {
+            if (data.from_position && data.to_position) {
+                const attempt = data.attempt ? ` (attempt ${data.attempt})` : '';
+                return `Moving from (${data.from_position.x.toFixed(2)}m, ${data.from_position.y.toFixed(2)}m) to (${data.to_position.x.toFixed(2)}m, ${data.to_position.y.toFixed(2)}m)${attempt}`;
+            } else if (data.angle !== undefined && data.distance !== undefined) {
                 const attempt = data.attempt ? ` (attempt ${data.attempt})` : '';
                 return `Moving to angle ${data.angle}°, distance ${data.distance}m${attempt}`;
             }
             return 'Robot moving to position';
+
+        case 'movement_completed':
+            if (data.actual_position) {
+                const result = data.detected ? '✓ Detected' : '✗ No detection';
+                return `Reached (${data.actual_position.x.toFixed(2)}m, ${data.actual_position.y.toFixed(2)}m) - ${result}`;
+            } else if (data.angle !== undefined && data.distance !== undefined) {
+                const result = data.detected ? '✓ Detected' : '✗ No detection';
+                return `Reached ${data.angle}° @ ${data.distance}m - ${result}`;
+            }
+            return 'Movement completed';
+
+        case 'boundary_step_started':
+            if (data.angle !== undefined) {
+                const remaining = data.remaining_steps !== undefined ? ` (${data.remaining_steps} steps remaining)` : '';
+                return `Testing boundary at ${data.angle}°${remaining}`;
+            }
+            return 'Starting boundary step';
+
+        case 'boundary_step_completed':
+            if (data.angle !== undefined && data.distance !== undefined) {
+                const result = data.detected ? '✓ Detected' : '✗ No detection';
+                const boundaryMsg = data.boundary_found ? ' - BOUNDARY FOUND!' : '';
+                return `${data.angle}° @ ${data.distance}m: ${result}${boundaryMsg}`;
+            }
+            return 'Boundary step completed';
 
         case 'measurement_completed':
             if (data.angle !== undefined && data.distance !== undefined) {
@@ -85,7 +118,7 @@ function formatEventData(event: any): string {
         case 'compliance_measurement_completed':
             if (data.angle !== undefined && data.distance !== undefined) {
                 const detected = data.detected ? '✓ Detected' : '✗ No detection';
-                const offset = data.offset_from_boundary ? ` (${data.offset_from_boundary.toFixed(1)}m inside boundary)` : '';
+                const offset = (data.offset_from_boundary !== undefined && data.offset_from_boundary !== null) ? ` (${data.offset_from_boundary.toFixed(1)}m inside boundary)` : '';
                 return `Angle ${data.angle}°, distance ${data.distance}m${offset}: ${detected}`;
             }
             return 'Measurement completed';
@@ -114,10 +147,8 @@ function formatEventData(event: any): string {
             return data.error ? `Test failed: ${data.error}` : 'Test failed';
 
         case 'phase_progress':
-            if (data.completed_angles !== undefined && data.total_angles !== undefined) {
-                return `Progress: ${data.completed_angles}/${data.total_angles} angles completed`;
-            } else if (data.completed_positions !== undefined && data.total_positions !== undefined) {
-                return `Progress: ${data.completed_positions}/${data.total_positions} positions completed`;
+            if (data.completed !== undefined && data.total !== undefined) {
+                return `Progress: ${data.completed}/${data.total} (${data.phase || 'test'})`;
             }
             return 'Test in progress...';
 
@@ -180,56 +211,58 @@ type TelemetrySample = {
 export default function TestingPattern1() {
     const navigate = useNavigate();
     const { state: locationState } = useLocation();
-    const data = locationState as (Test | TestDB & { resuming?: boolean }) | undefined;
+    const data = locationState as (Test | TestDB & { resuming?: boolean; viewOnly?: boolean }) | undefined;
 
     // All hooks must be called before any conditional returns
     const {
+        executionState,
+        testId: _testId,
         isRunning,
         isPaused,
+        isCompleted: isTestCompleted,
+        boundaryComplete,
+        tangentialComplete,
+        radialComplete,
+        awaitingSelection,
         currentPhase,
+        status,
         boundaryResults,
         tangentialResults,
         radialResults,
-        awaitingContinuation,
         phaseProgress,
         events,
         connected,
-        status,
-        boundaryDetectionCompleted,
-        tangentialTestCompleted,
-        radialTestCompleted,
         startTest,
         startTestPhase,
         loadTestHistory,
         pauseTest,
         resumeTest,
-        stopTest,
-        fetchState
+        stopTest
     } = useMasterTest();
 
     const [confirmModalOpen, setConfirmModalOpen] = useState(false);
     const [latestTelemetry, setLatestTelemetry] = useState<TelemetrySample | null>(null);
+    const [showPositionDialog, setShowPositionDialog] = useState(false);
+    const [initialPosition, setInitialPosition] = useState<InitialPosition | null>(null);
 
     // Derived state (safe to use data here because hooks are already called)
     const liveStatus = status || data?.status || 'PLANNED';
-    const isCompleted = liveStatus === 'COMPLETED';
+    const isCompleted = isTestCompleted || liveStatus === 'COMPLETED';
 
     // Debug logging
     useEffect(() => {
         console.log("=".repeat(60));
         console.log("📊 [UI] Component State:");
         console.log("=".repeat(60));
+        console.log("executionState:", executionState);
         console.log("isRunning:", isRunning);
         console.log("isPaused:", isPaused);
         console.log("isCompleted:", isCompleted);
-        console.log("awaitingContinuation:", awaitingContinuation);
+        console.log("awaitingSelection:", awaitingSelection);
         console.log("connected:", connected);
         console.log("status:", liveStatus);
-        console.log("data:", data);
-        console.log("Button should show:", !isRunning && !isPaused && !awaitingContinuation);
-        console.log("Button should be enabled:", !isCompleted);
         console.log("=".repeat(60));
-    }, [isRunning, isPaused, isCompleted, awaitingContinuation, connected, liveStatus, data]);
+    }, [executionState, isRunning, isPaused, isCompleted, awaitingSelection, connected, liveStatus]);
 
     // Subscribe to telemetry SSE for this test
     useEffect(() => {
@@ -311,53 +344,22 @@ export default function TestingPattern1() {
     useEffect(() => {
         const loadTestState = async () => {
             if (data?.test_id) {
-                // Always load historical data first to show what's been done
+                // Load historical data first to show what's been done
                 if (data.status && data.status !== 'PLANNED') {
-                    await loadTestHistory(data.test_id);
-                }
+                    const viewOnly = (data as any).viewOnly || false;
+                    await loadTestHistory(data.test_id, viewOnly);
 
-                // Check current orchestrator state
-                await fetchState();
-
-                // If orchestrator has no state but database does, restore from database
-                // This handles the case where server restarted or orchestrator lost state
-                try {
-                    const dbStateRes = await api.get(`/api/test/${data.test_id}/state`);
-                    if (dbStateRes.data) {
-                        // If test is awaiting selection (or was stopped mid-phase), restore orchestrator state
-                        // This ensures the buttons work correctly and user can restart/continue
-                        if (dbStateRes.data.awaiting_test_selection) {
-                            console.log("[TestingPattern1] Test awaiting selection, restoring orchestrator state from database");
-                            console.log("[TestingPattern1] Current phase:", dbStateRes.data.current_phase);
-
-                            try {
-                                await api.post('/api/master-test/resume-from-database', {
-                                    test_id: data.test_id
-                                });
-
-                                console.log("[TestingPattern1] Orchestrator state restored, waiting for SSE event");
-
-                                // Wait a bit for SSE event to propagate and modal/buttons to appear
-                                await new Promise(resolve => setTimeout(resolve, 1000));
-
-                                // Refresh state to get updated orchestrator state
-                                await fetchState();
-
-                                console.log("[TestingPattern1] State refreshed after restore");
-                            } catch (err) {
-                                console.error("[TestingPattern1] Error restoring state:", err);
-                            }
-                        }
+                    // If view-only, show message
+                    if (viewOnly) {
+                        message.info("Viewing historical test data (read-only)");
                     }
-                } catch (err) {
-                    console.error("[TestingPattern1] Error checking/restoring state:", err);
                 }
             }
         };
 
         loadTestState();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [data?.test_id]); // fetchState and loadTestHistory are stable from hook
+    }, [data?.test_id, (data as any)?.viewOnly]); // loadTestHistory is stable from hook
 
     // Early return after all hooks
     if (!data) return <Navigate to="/controlpanel" replace />;
@@ -375,24 +377,24 @@ export default function TestingPattern1() {
 
     const getStatusDisplay = () => {
         // More descriptive status messages based on current state
-        if (liveStatus === 'COMPLETED') return 'All Tests Complete';
+        if (liveStatus === 'COMPLETED' || isCompleted) return 'All Tests Complete';
         if (liveStatus === 'ERROR') return 'Test Failed';
 
-        if (awaitingContinuation) {
-            if (tangentialTestCompleted && radialTestCompleted) {
+        if (awaitingSelection) {
+            if (tangentialComplete && radialComplete) {
                 return 'All Tests Complete';
-            } else if (tangentialTestCompleted) {
-                return 'Awaiting Radial Test';
-            } else if (radialTestCompleted) {
-                return 'Awaiting Tangential Test';
-            } else if (boundaryDetectionCompleted) {
-                return 'Awaiting Test Selection';
+            } else if (tangentialComplete) {
+                return 'Awaiting Radial Test Selection';
+            } else if (radialComplete) {
+                return 'Awaiting Tangential Test Selection';
+            } else if (boundaryComplete) {
+                return 'Boundary Complete - Awaiting Test Selection';
             }
         }
 
         if (isRunning) {
-            if (currentPhase === 'BOUNDARY_DETECTION') return 'Running Boundary Detection';
-            if (currentPhase === 'TANGENTIAL_TEST') return 'Running Tangential Test';
+            if (currentPhase === 'BOUNDARY_DETECTION') return 'Running IEC 63180 Boundary Detection';
+            if (currentPhase === 'TANGENTIAL_TEST') return 'Running IEC 63180 Tangential Test';
             if (currentPhase === 'RADIAL_TEST') return 'Running Radial Test';
             return 'Test In Progress';
         }
@@ -437,8 +439,14 @@ export default function TestingPattern1() {
             return;
         }
 
-        console.log("✅ Opening confirmation modal...");
-        setConfirmModalOpen(true);
+        // Check if we have initial position, if not show position dialog first
+        if (!initialPosition) {
+            console.log("📍 No initial position set - showing position dialog...");
+            setShowPositionDialog(true);
+        } else {
+            console.log("✅ Opening confirmation modal...");
+            setConfirmModalOpen(true);
+        }
     };
 
     const handleConfirmStart = async () => {
@@ -451,27 +459,24 @@ export default function TestingPattern1() {
 
         try {
             console.log("📡 Calling startTest API...");
+            console.log("📍 Initial Position:", initialPosition);
             await startTest({
                 test_id: data.test_id,
                 sensor_id: data.sensor_id,
                 test_type: 'FULL',
 
-                // Phase 1: Boundary Detection - IEC 63180 compliant
-                // 10° increments for full 360° coverage (36 angles total)
-                boundary_angles: Array.from({ length: 36 }, (_, i) => i * 10),
-                boundary_start_distance: 8.0,  // Start far (outside detection range)
-                boundary_end_distance: 1.0,     // Move close
-                boundary_step: 0.5,             // 0.5m steps
-
-                // Phase 2: Compliance Test (at 2m and 3m from boundary)
-                compliance_test_distances: [2.0, 3.0],
-                compliance_tangential_sweep: true,
-                compliance_tangential_step: 15,
+                // IEC 63180 parameters are hardcoded in MasterTestOrchestrator:
+                // - Boundary Detection: distances [2, 3, 4, 5, 6]m, angles every 30°
+                // - Tangential Test: 0.5m grid cells
+                // - Radial Test: offsets [-2, -1, 1, 2]m from boundary
 
                 // Timing - IEC 63180 compliant
                 movement_speed: 50,             // 0.5 m/s
                 detection_wait_time: 2000,      // 2 second wait
-                repeat_measurements: 2          // 2 attempts per position
+                repeat_measurements: 2,         // 2 attempts per position
+
+                // Initial position (if provided)
+                initial_position: initialPosition || undefined
             });
             console.log("✅ Test started successfully!");
             setConfirmModalOpen(false);
@@ -499,7 +504,6 @@ export default function TestingPattern1() {
                     okText: "Got it"
                 });
                 // Reload state to show proper buttons
-                await fetchState();
                 await loadTestHistory(data.test_id);
             }
         }
@@ -560,7 +564,7 @@ export default function TestingPattern1() {
         const csv = [
             'Angle (degrees),Detection Boundary (m),Detected Distance (m),No Detection Distance (m)',
             ...boundaryResults.map(r =>
-                `${r.angle},${r.detection_boundary ?? 'N/A'},${r.detected_distance ?? 'N/A'},${r.no_detection_distance ?? 'N/A'}`
+                `${r.angle},${r.detection_boundary !== null ? r.detection_boundary : 'N/A'},${r.detected_distance !== null ? r.detected_distance : 'N/A'},${r.no_detection_distance !== null ? r.no_detection_distance : 'N/A'}`
             )
         ].join('\n');
         downloadCSV(`${data.test_name}_boundary_results.csv`, csv);
@@ -621,7 +625,7 @@ export default function TestingPattern1() {
             '=== BOUNDARY DETECTION RESULTS ===',
             'Angle (degrees),Detection Boundary (m),Detected Distance (m),No Detection Distance (m)',
             ...boundaryResults.map(r =>
-                `${r.angle},${r.detection_boundary ?? 'N/A'},${r.detected_distance ?? 'N/A'},${r.no_detection_distance ?? 'N/A'}`
+                `${r.angle},${r.detection_boundary !== null ? r.detection_boundary : 'N/A'},${r.detected_distance !== null ? r.detected_distance : 'N/A'},${r.no_detection_distance !== null ? r.no_detection_distance : 'N/A'}`
             ),
             '',
             '=== TANGENTIAL TEST RESULTS ===',
@@ -645,22 +649,22 @@ export default function TestingPattern1() {
             test_id: data.test_id,
             export_date: new Date().toISOString(),
             boundary_detection: {
-                completed: boundaryDetectionCompleted,
+                completed: boundaryComplete,
                 results: boundaryResults
             },
             tangential_test: {
-                completed: tangentialTestCompleted,
+                completed: tangentialComplete,
                 results: tangentialResults
             },
             radial_test: {
-                completed: radialTestCompleted,
+                completed: radialComplete,
                 results: radialResults
             }
         });
     };
 
     return (
-        <Layout>
+        <Layout style={{ minHeight: "100vh" }}>
             <Header
                 style={{
                     position: "sticky",
@@ -673,7 +677,8 @@ export default function TestingPattern1() {
                     justifyContent: "space-between",
                     paddingInline: 24,
                     boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-                }}>
+                }}
+            >
                 <div style={{ flex: 1 }}>
                     <Button
                         type="link"
@@ -685,49 +690,84 @@ export default function TestingPattern1() {
                     </Button>
                 </div>
 
-                <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)" }}>
+                <div
+                    style={{
+                        position: "absolute",
+                        left: "50%",
+                        transform: "translateX(-50%)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                    }}
+                >
                     <Space>
-                        <div style={{ background: "#1677ff", color: "#fff", padding: "4px", height: "20px", width: "20px" }} />
-                        <Text>RoboControl-X1</Text>
-                        <Tag color={getStatusColor()} style={{ borderRadius: "99px" }}>
+                        <div
+                            style={{
+                                background: "#1677ff",
+                                color: "#fff",
+                                padding: "4px",
+                                height: "20px",
+                                width: "20px",
+                                borderRadius: 4,
+                            }}
+                        />
+                        <Text>{data.test_name}</Text>
+                        <Tag color={getStatusColor()} style={{ borderRadius: 999 }}>
                             {getStatusDisplay()}
-                        </Tag>
-                        <Tag color={getPhaseColor()}>
-                            {getPhaseDisplay()}
-                        </Tag>
-                        <Tag color={connected ? "green" : "red"}>
-                            {connected ? "●" : "○"} SSE
                         </Tag>
                     </Space>
                 </div>
 
-                <div style={{ flex: 1, display: "flex", justifyContent: "right" }}>
-                    <Space>
+                <div style={{ flex: 1 }} />
+            </Header>
+
+            {/* Test Control Bar - Below Header */}
+            <div style={{
+                position: "sticky",
+                top: 56,
+                zIndex: 9,
+                background: "#fafafa",
+                borderBottom: "1px solid #f0f0f0",
+                padding: "12px 24px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between"
+            }}>
+                <Space size="small">
+                    <Tag color={getPhaseColor()}>
+                        {getPhaseDisplay()}
+                    </Tag>
+                    <Tag color={connected ? "green" : "red"}>
+                        {connected ? "●" : "○"} SSE
+                    </Tag>
+                </Space>
+
+                <Space>
                         {/* Start button only before boundary is done */}
-                        {!isRunning && !isPaused && !isCompleted && !boundaryDetectionCompleted && (
+                        {!isRunning && !isPaused && !isCompleted && !boundaryComplete && (
                             <Button color="primary" variant="solid" onClick={handleStart}>
-                                {boundaryResults.length > 0 ? 'Restart Test' : 'Start Test'}
+                                {boundaryResults.length > 0 ? 'Restart Test' : 'Start IEC 63180 Test'}
                             </Button>
                         )}
 
                         {/* Phase selection buttons once boundary is done (works from history too) */}
-                        {!isRunning && !isPaused && boundaryDetectionCompleted && !isCompleted && (
+                        {!isRunning && !isPaused && boundaryComplete && !isCompleted && (
                             <Space>
                                 <Button
                                     type="primary"
                                     onClick={handleStartTangential}
-                                    disabled={tangentialTestCompleted}
+                                    disabled={tangentialComplete}
                                 >
-                                    {tangentialTestCompleted ? 'Tangential Complete' : 'Start Tangential Test'}
+                                    {tangentialComplete ? 'Tangential Complete ✓' : 'Start Tangential Test'}
                                 </Button>
                                 <Button
                                     type="primary"
                                     onClick={handleStartRadial}
-                                    disabled={radialTestCompleted}
+                                    disabled={radialComplete}
                                 >
-                                    {radialTestCompleted ? 'Radial Complete' : 'Start Radial Test'}
+                                    {radialComplete ? 'Radial Complete ✓' : 'Start Radial Test'}
                                 </Button>
-                                {tangentialTestCompleted && (
+                                {tangentialComplete && (
                                     <Button
                                         type="default"
                                         disabled
@@ -737,7 +777,7 @@ export default function TestingPattern1() {
                                         ✓ Tangential Complete
                                     </Button>
                                 )}
-                                {radialTestCompleted && (
+                                {radialComplete && (
                                     <Button
                                         type="default"
                                         disabled
@@ -763,7 +803,7 @@ export default function TestingPattern1() {
                         )}
 
                         {/* Show resume/stop when test is paused (but not awaiting continuation) */}
-                        {isPaused && !awaitingContinuation && (
+                        {isPaused && !awaitingSelection && (
                             <>
                                 <Button color="primary" variant="solid" onClick={handleResume}>
                                     Resume
@@ -773,11 +813,10 @@ export default function TestingPattern1() {
                                 </Button>
                             </>
                         )}
-                    </Space>
-                </div>
-            </Header>
+                </Space>
+            </div>
 
-            <Content style={{ height: '100vh', padding: 24, background: '#f5f5f5', overflow: 'auto' }}>
+            <Content style={{ height: 'calc(100vh - 56px - 49px)', padding: 24, background: '#f5f5f5', overflow: 'auto' }}>
                 <div style={{ textAlign: "center", marginBottom: 24 }}>
                     <Title level={2}>{data.test_name}</Title>
                     <Text>Two-phase boundary detection and tangential/radial testing</Text>
@@ -788,9 +827,9 @@ export default function TestingPattern1() {
                     <Steps
                         current={
                             currentPhase === 'COMPLETED' ? 3 :
-                            (radialTestCompleted || currentPhase === 'RADIAL_TEST') ? 2 :
-                            (tangentialTestCompleted || currentPhase === 'TANGENTIAL_TEST') ? 2 :
-                            (boundaryDetectionCompleted || currentPhase === 'BOUNDARY_DETECTION') ? 1 :
+                            (radialComplete || currentPhase === 'RADIAL_TEST') ? 2 :
+                            (tangentialComplete || currentPhase === 'TANGENTIAL_TEST') ? 2 :
+                            (boundaryComplete || currentPhase === 'BOUNDARY_DETECTION') ? 1 :
                             0
                         }
                         status={
@@ -802,29 +841,29 @@ export default function TestingPattern1() {
                         items={[
                             {
                                 title: 'Boundary Detection',
-                                description: boundaryDetectionCompleted ? `${boundaryResults.length}/36 angles` : 'Pending',
-                                icon: boundaryDetectionCompleted ? <CheckCircleOutlined /> : undefined,
-                                status: boundaryDetectionCompleted ? 'finish' :
+                                description: boundaryComplete ? `${boundaryResults.length}/36 angles` : 'Pending',
+                                icon: boundaryComplete ? <CheckCircleOutlined /> : undefined,
+                                status: boundaryComplete ? 'finish' :
                                         currentPhase === 'BOUNDARY_DETECTION' ? 'process' : 'wait'
                             },
                             {
                                 title: 'Tangential Test',
-                                description: tangentialTestCompleted ? `${tangentialResults.length} measurements` :
+                                description: tangentialComplete ? `${tangentialResults.length} measurements` :
                                             currentPhase === 'TANGENTIAL_TEST' && tangentialResults.length > 0 ? `${tangentialResults.length} measurements` :
                                             'Pending',
-                                icon: tangentialTestCompleted ? <CheckCircleOutlined /> :
+                                icon: tangentialComplete ? <CheckCircleOutlined /> :
                                       currentPhase === 'TANGENTIAL_TEST' ? <ClockCircleOutlined /> : undefined,
-                                status: tangentialTestCompleted ? 'finish' :
+                                status: tangentialComplete ? 'finish' :
                                         currentPhase === 'TANGENTIAL_TEST' ? 'process' : 'wait'
                             },
                             {
                                 title: 'Radial Test',
-                                description: radialTestCompleted ? `${radialResults.length} measurements` :
+                                description: radialComplete ? `${radialResults.length} measurements` :
                                             currentPhase === 'RADIAL_TEST' && radialResults.length > 0 ? `${radialResults.length} measurements` :
                                             'Pending',
-                                icon: radialTestCompleted ? <CheckCircleOutlined /> :
+                                icon: radialComplete ? <CheckCircleOutlined /> :
                                       currentPhase === 'RADIAL_TEST' ? <ClockCircleOutlined /> : undefined,
-                                status: radialTestCompleted ? 'finish' :
+                                status: radialComplete ? 'finish' :
                                         currentPhase === 'RADIAL_TEST' ? 'process' : 'wait'
                             }
                         ]}
@@ -860,27 +899,27 @@ export default function TestingPattern1() {
                         <Col xs={24} sm={8}>
                             <Statistic
                                 title="Boundary Detection"
-                                value={boundaryDetectionCompleted ? "Complete" : boundaryResults.length > 0 ? "In Progress" : "Pending"}
-                                prefix={boundaryDetectionCompleted ? <CheckCircleOutlined style={{ color: 'green' }} /> : null}
+                                value={boundaryComplete ? "Complete" : boundaryResults.length > 0 ? "In Progress" : "Pending"}
+                                prefix={boundaryComplete ? <CheckCircleOutlined style={{ color: 'green' }} /> : null}
                                 valueStyle={{
-                                    color: boundaryDetectionCompleted ? 'green' :
+                                    color: boundaryComplete ? 'green' :
                                            boundaryResults.length > 0 ? 'blue' : 'gray',
                                     fontSize: 16
                                 }}
                             />
                             {boundaryResults.length > 0 && (
                                 <Text type="secondary" style={{ fontSize: 12 }}>
-                                    {boundaryResults.filter(r => r.detection_boundary !== null).length}/{boundaryResults.length} detected
+                                    {boundaryResults.filter(r => r.detection_boundary !== null).length}/{boundaryResults.length} found
                                 </Text>
                             )}
                         </Col>
                         <Col xs={24} sm={8}>
                             <Statistic
                                 title="Tangential Test"
-                                value={tangentialTestCompleted ? "Complete" : tangentialResults.length > 0 ? "In Progress" : "Pending"}
-                                prefix={tangentialTestCompleted ? <CheckCircleOutlined style={{ color: 'green' }} /> : null}
+                                value={tangentialComplete ? "Complete" : tangentialResults.length > 0 ? "In Progress" : "Pending"}
+                                prefix={tangentialComplete ? <CheckCircleOutlined style={{ color: 'green' }} /> : null}
                                 valueStyle={{
-                                    color: tangentialTestCompleted ? 'green' :
+                                    color: tangentialComplete ? 'green' :
                                            tangentialResults.length > 0 ? 'blue' : 'gray',
                                     fontSize: 16
                                 }}
@@ -894,10 +933,10 @@ export default function TestingPattern1() {
                         <Col xs={24} sm={8}>
                             <Statistic
                                 title="Radial Test"
-                                value={radialTestCompleted ? "Complete" : radialResults.length > 0 ? "In Progress" : "Pending"}
-                                prefix={radialTestCompleted ? <CheckCircleOutlined style={{ color: 'green' }} /> : null}
+                                value={radialComplete ? "Complete" : radialResults.length > 0 ? "In Progress" : "Pending"}
+                                prefix={radialComplete ? <CheckCircleOutlined style={{ color: 'green' }} /> : null}
                                 valueStyle={{
-                                    color: radialTestCompleted ? 'green' :
+                                    color: radialComplete ? 'green' :
                                            radialResults.length > 0 ? 'blue' : 'gray',
                                     fontSize: 16
                                 }}
@@ -912,10 +951,10 @@ export default function TestingPattern1() {
                 </Card>
 
                 {/* Test Statistics and Insights */}
-                {(boundaryDetectionCompleted || tangentialTestCompleted || radialTestCompleted) && (
+                {(boundaryComplete || tangentialComplete || radialComplete) && (
                     <Card title="Test Statistics" style={{ marginBottom: 16 }}>
                         <Row gutter={16}>
-                            {boundaryDetectionCompleted && (
+                            {boundaryComplete && (
                                 <>
                                     <Col xs={12} sm={6}>
                                         <Statistic
@@ -942,7 +981,7 @@ export default function TestingPattern1() {
                                     </Col>
                                 </>
                             )}
-                            {tangentialTestCompleted && tangentialResults.length > 0 && (
+                            {tangentialComplete && tangentialResults.length > 0 && (
                                 <Col xs={12} sm={6}>
                                     <Statistic
                                         title="Tangential Detection Rate"
@@ -952,7 +991,7 @@ export default function TestingPattern1() {
                                     />
                                 </Col>
                             )}
-                            {radialTestCompleted && radialResults.length > 0 && (
+                            {radialComplete && radialResults.length > 0 && (
                                 <Col xs={12} sm={6}>
                                     <Statistic
                                         title="Radial Detection Rate"
@@ -1046,7 +1085,7 @@ export default function TestingPattern1() {
                                                 border: '1px solid #389e0d',
                                                 zIndex: 5
                                             }}
-                                            title={`${result.angle}°: ${result.detection_boundary.toFixed(2)}m`}
+                                            title={`${result.angle}°: ${distance.toFixed(2)}m`}
                                         />
                                     );
                                 })}
@@ -1149,32 +1188,21 @@ export default function TestingPattern1() {
                                     valueStyle={{ fontSize: 18 }}
                                 />
                             </Col>
-                            {phaseProgress.total_angles && (
-                                <Col span={12}>
+                            {phaseProgress.total && (
+                                <Col span={24}>
                                     <Statistic
-                                        title="Angles Completed"
-                                        value={phaseProgress.completed_angles}
-                                        suffix={`/ ${phaseProgress.total_angles}`}
-                                    />
-                                </Col>
-                            )}
-                            {phaseProgress.total_positions && (
-                                <Col span={12}>
-                                    <Statistic
-                                        title="Positions Completed"
-                                        value={phaseProgress.completed_positions}
-                                        suffix={`/ ${phaseProgress.total_positions}`}
+                                        title={`${phaseProgress.phase || 'Test'} Progress`}
+                                        value={phaseProgress.completed}
+                                        suffix={`/ ${phaseProgress.total}`}
                                     />
                                 </Col>
                             )}
                         </Row>
                         <Progress
                             percent={
-                                phaseProgress.total_angles && phaseProgress.completed_angles !== undefined
-                                    ? Math.round((phaseProgress.completed_angles / phaseProgress.total_angles) * 100)
-                                    : phaseProgress.total_positions && phaseProgress.completed_positions !== undefined
-                                        ? Math.round((phaseProgress.completed_positions / phaseProgress.total_positions) * 100)
-                                        : 0
+                                phaseProgress.total && phaseProgress.completed !== undefined
+                                    ? Math.round((phaseProgress.completed / phaseProgress.total) * 100)
+                                    : 0
                             }
                             status={isPaused ? "exception" : "active"}
                             style={{ marginTop: 16 }}
@@ -1190,7 +1218,7 @@ export default function TestingPattern1() {
                         extra={
                             <Space>
                                 <Text type="secondary">
-                                    {boundaryResults.filter(r => r.detection_boundary !== null).length} detected
+                                    {boundaryResults.filter(r => r.detection_boundary !== null).length} found
                                 </Text>
                                 <Button
                                     size="small"
@@ -1219,15 +1247,15 @@ export default function TestingPattern1() {
                                         <Card
                                             size="small"
                                             style={{
-                                                background: result.detection_boundary ? '#f6ffed' : '#fff2e8',
-                                                border: result.detection_boundary ? '1px solid #b7eb8f' : '1px solid #ffd591'
+                                                background: result.detection_boundary !== null ? '#f6ffed' : '#fff2e8',
+                                                border: result.detection_boundary !== null ? '1px solid #b7eb8f' : '1px solid #ffd591'
                                             }}
                                         >
                                             <Statistic
                                                 title={`${result.angle}°`}
-                                                value={result.detection_boundary?.toFixed(2) || 'N/A'}
-                                                suffix="m"
-                                                prefix={result.detection_boundary ? <CheckCircleOutlined style={{ color: '#52c41a' }} /> : null}
+                                                value={result.detection_boundary !== null ? result.detection_boundary.toFixed(2) : 'N/A'}
+                                                suffix={result.detection_boundary !== null ? "m" : ""}
+                                                prefix={result.detection_boundary !== null ? <CheckCircleOutlined style={{ color: '#52c41a' }} /> : null}
                                                 valueStyle={{ fontSize: 14 }}
                                             />
                                         </Card>
@@ -1236,6 +1264,27 @@ export default function TestingPattern1() {
                             />
                         </div>
                     </Card>
+                )}
+
+                {/* Tangential Test Grid Visualization */}
+                {tangentialResults.length > 0 && (
+                    <GridHeatmap
+                        data={tangentialResults.map(r => ({
+                            x: r.angle !== undefined && r.distance !== undefined
+                                ? r.distance * Math.cos(r.angle * Math.PI / 180)
+                                : 0,
+                            y: r.angle !== undefined && r.distance !== undefined
+                                ? r.distance * Math.sin(r.angle * Math.PI / 180)
+                                : 0,
+                            row: 0,  // Will be calculated if needed
+                            col: 0,  // Will be calculated if needed
+                            detected: r.detected,
+                            angle: r.angle,
+                            distance: r.distance
+                        }))}
+                        cellSize={0.5}
+                        autoAdaptRadius={true}
+                    />
                 )}
 
                 {/* Tangential Test Results */}
@@ -1286,7 +1335,7 @@ export default function TestingPattern1() {
                                                 prefix={result.detected ? <CheckCircleOutlined style={{ color: '#52c41a' }} /> : null}
                                                 valueStyle={{ fontSize: 14 }}
                                             />
-                                            {result.offset_from_boundary !== undefined && (
+                                            {result.offset_from_boundary !== undefined && result.offset_from_boundary !== null && (
                                                 <Text type="secondary" style={{ fontSize: 11 }}>
                                                     {result.offset_from_boundary.toFixed(1)}m inside boundary
                                                 </Text>
@@ -1347,7 +1396,7 @@ export default function TestingPattern1() {
                                                 prefix={result.detected ? <CheckCircleOutlined style={{ color: '#52c41a' }} /> : null}
                                                 valueStyle={{ fontSize: 14 }}
                                             />
-                                            {result.offset_from_boundary !== undefined && (
+                                            {result.offset_from_boundary !== undefined && result.offset_from_boundary !== null && (
                                                 <Text type="secondary" style={{ fontSize: 11 }}>
                                                     {result.offset_from_boundary.toFixed(1)}m inside boundary
                                                 </Text>
@@ -1424,7 +1473,22 @@ export default function TestingPattern1() {
                     </p>
                 </div>
             </Modal>
+
+            {/* Initial Position Dialog */}
+            <InitialPositionDialog
+                visible={showPositionDialog}
+                onConfirm={(position) => {
+                    console.log("📍 Position confirmed:", position);
+                    setInitialPosition(position);
+                    setShowPositionDialog(false);
+                    // After setting position, show confirmation modal
+                    setConfirmModalOpen(true);
+                }}
+                onCancel={() => {
+                    console.log("📍 Position dialog cancelled");
+                    setShowPositionDialog(false);
+                }}
+            />
         </Layout>
     );
 }
-

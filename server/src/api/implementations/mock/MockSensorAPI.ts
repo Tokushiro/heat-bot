@@ -52,14 +52,40 @@ export class MockSensorAPI extends EventEmitter implements ISensorAPI {
             console.log(`[MockSensor] Initializing mock sensor: ${config.sensorId} (${config.mac})`);
 
             // Set default detection zones if not provided
-            // More realistic detection range: 1m-10m with distance-based probability
+            // Realistic PIR detection with angular variation
+            // Front has longest range, back has shortest (realistic sensor behavior)
             const defaultZones: DetectionZoneConfig[] = config.detectionZones || [
+                // Front zone (315° to 45°): Maximum detection - 5m range
                 {
-                    minDistance: 1,
-                    maxDistance: 10,      // Realistic PIR detection range (1-10m)
-                    minAngle: 0,
-                    maxAngle: 360,        // Full 360° coverage
-                    detectionProbability: 0.70  // Base 70% detection probability (reduced for more realistic failures)
+                    minDistance: 0.5,
+                    maxDistance: 5.0,
+                    minAngle: 315,
+                    maxAngle: 45,
+                    detectionProbability: 0.85  // 85% - strongest detection
+                },
+                // Right side (45° to 135°): Medium detection - 4m range
+                {
+                    minDistance: 0.5,
+                    maxDistance: 4.0,
+                    minAngle: 45,
+                    maxAngle: 135,
+                    detectionProbability: 0.75  // 75% - medium detection
+                },
+                // Back zone (135° to 225°): Minimum detection - 3m range
+                {
+                    minDistance: 0.5,
+                    maxDistance: 3.0,
+                    minAngle: 135,
+                    maxAngle: 225,
+                    detectionProbability: 0.65  // 65% - weakest detection
+                },
+                // Left side (225° to 315°): Medium detection - 4m range
+                {
+                    minDistance: 0.5,
+                    maxDistance: 4.0,
+                    minAngle: 225,
+                    maxAngle: 315,
+                    detectionProbability: 0.75  // 75% - medium detection
                 }
             ];
 
@@ -166,9 +192,9 @@ export class MockSensorAPI extends EventEmitter implements ISensorAPI {
             const distanceRange = matchedZone.maxDistance - matchedZone.minDistance;
             const relativeDistance = (distance - matchedZone.minDistance) / distanceRange;
 
-            // Steeper probability decrease: from 100% at minDistance to 50% at maxDistance
-            // This creates more boundary detection challenges
-            const distanceFactor = 1.0 - (relativeDistance * 0.5);
+            // Steeper probability decrease: from 100% at minDistance to 30% at maxDistance
+            // This creates more realistic boundary detection challenges
+            const distanceFactor = 1.0 - (relativeDistance * 0.7);
             finalProbability = zoneConfidence * distanceFactor;
 
             // Add environmental noise factors for more realism
@@ -180,14 +206,14 @@ export class MockSensorAPI extends EventEmitter implements ISensorAPI {
 
             finalProbability *= tempNoise * humidityNoise;
 
-            // Add more random variation (±20%) to simulate real-world unpredictability
+            // Add more random variation (±15%) to simulate real-world unpredictability
             // This includes: air currents, electrical noise, sensor warmup, etc.
-            const randomVariation = 0.8 + (Math.random() * 0.4); // 0.8 to 1.2
+            const randomVariation = 0.85 + (Math.random() * 0.3); // 0.85 to 1.15
             finalProbability *= randomVariation;
 
             // Add edge case unpredictability at boundary distances
-            // When near the boundary (within 10% of range limits), add extra randomness
-            if (relativeDistance < 0.1 || relativeDistance > 0.9) {
+            // When near the boundary (within 15% of range limits), add extra randomness
+            if (relativeDistance < 0.1 || relativeDistance > 0.85) {
                 const boundaryNoise = 0.7 + (Math.random() * 0.3); // 0.7 to 1.0 (always reduces)
                 finalProbability *= boundaryNoise;
             }
