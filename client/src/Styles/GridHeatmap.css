@@ -1,0 +1,172 @@
+/* Grid Heatmap Container */
+.grid-heatmap-container {
+    margin: 20px 0;
+    padding: 20px;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Header */
+.grid-heatmap-header {
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.grid-heatmap-header h4 {
+    margin-bottom: 8px;
+    color: #1890ff;
+}
+
+/* Legend */
+.grid-heatmap-legend {
+    margin-bottom: 20px;
+    padding: 12px;
+    background: #f5f5f5;
+    border-radius: 4px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.legend-marker {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    margin-right: 8px;
+    border-radius: 3px;
+    vertical-align: middle;
+    border: 1px solid #fff;
+}
+
+.legend-detected {
+    background-color: rgba(76, 175, 80, 0.7);
+}
+
+.legend-not-detected {
+    background-color: rgba(244, 67, 54, 0.7);
+}
+
+.legend-sensor {
+    background-color: #ff6b6b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-weight: bold;
+    font-size: 12px;
+}
+
+/* Canvas Wrapper */
+.grid-heatmap-canvas-wrapper {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+
+/* Canvas */
+.grid-heatmap-canvas {
+    border: 1px solid #d9d9d9;
+    border-radius: 4px;
+    cursor: crosshair;
+    background: #fafafa;
+}
+
+.grid-heatmap-canvas:hover {
+    border-color: #1890ff;
+}
+
+/* Tooltip */
+.grid-heatmap-tooltip {
+    position: fixed;
+    background: rgba(0, 0, 0, 0.85);
+    color: #fff;
+    padding: 10px 14px;
+    border-radius: 4px;
+    font-size: 13px;
+    line-height: 1.6;
+    pointer-events: none;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    min-width: 200px;
+}
+
+.grid-heatmap-tooltip div {
+    margin: 4px 0;
+}
+
+.grid-heatmap-tooltip strong {
+    color: #40a9ff;
+}
+
+/* Statistics */
+.grid-heatmap-stats {
+    padding: 16px;
+    background: #f0f2f5;
+    border-radius: 4px;
+    text-align: center;
+}
+
+.grid-heatmap-stats .ant-col {
+    padding: 8px 16px;
+}
+
+.grid-heatmap-stats strong {
+    color: #1890ff;
+    margin-right: 8px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .grid-heatmap-container {
+        padding: 12px;
+    }
+
+    .grid-heatmap-canvas {
+        max-width: 100%;
+        height: auto;
+    }
+
+    .grid-heatmap-legend {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .grid-heatmap-stats .ant-row {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .grid-heatmap-tooltip {
+        font-size: 11px;
+        padding: 8px 10px;
+        min-width: 160px;
+    }
+}
+
+/* Loading State */
+.grid-heatmap-loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 400px;
+    color: #8c8c8c;
+}
+
+/* Empty State */
+.grid-heatmap-empty {
+    text-align: center;
+    padding: 40px;
+    color: #8c8c8c;
+}
+
+.grid-heatmap-empty-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+.grid-heatmap-empty-text {
+    font-size: 16px;
+}

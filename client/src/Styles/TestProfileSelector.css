@@ -1,0 +1,148 @@
+/* Test Profile Selector Styles */
+
+.test-profile-selector {
+    padding: 20px;
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+.profile-card {
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+}
+
+/* Profile Selection */
+.profile-selection {
+    margin-bottom: 20px;
+}
+
+.profile-option {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding-left: 10px;
+}
+
+.profile-option strong {
+    font-size: 16px;
+    color: #333;
+}
+
+.profile-description {
+    font-size: 13px;
+    color: #666;
+    line-height: 1.4;
+}
+
+/* Configuration Section */
+.profile-configuration {
+    margin-top: 20px;
+}
+
+.profile-configuration h3 {
+    margin-bottom: 20px;
+    color: #333;
+    font-size: 18px;
+    font-weight: 600;
+    border-bottom: 2px solid #1890ff;
+    padding-bottom: 8px;
+}
+
+.config-section {
+    background-color: #f9f9f9;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+}
+
+.config-item {
+    display: grid;
+    grid-template-columns: 200px 150px 1fr;
+    align-items: center;
+    gap: 15px;
+}
+
+.config-item label {
+    font-weight: 500;
+    color: #333;
+    font-size: 14px;
+}
+
+.config-item .ant-input-number {
+    width: 100%;
+}
+
+.config-hint {
+    font-size: 12px;
+    color: #999;
+    font-style: italic;
+}
+
+.config-summary {
+    margin-top: 20px;
+    padding: 15px;
+    background-color: #e6f7ff;
+    border-left: 4px solid #1890ff;
+    border-radius: 4px;
+}
+
+.config-summary strong {
+    color: #1890ff;
+}
+
+/* Action Buttons */
+.action-buttons {
+    display: flex;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.start-test-button {
+    height: 50px;
+    padding: 0 40px;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .test-profile-selector {
+        padding: 10px;
+    }
+
+    .config-item {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+
+    .config-item label {
+        font-weight: 600;
+    }
+
+    .config-hint {
+        margin-left: 0;
+    }
+
+    .start-test-button {
+        width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .profile-option strong {
+        font-size: 14px;
+    }
+
+    .profile-description {
+        font-size: 12px;
+    }
+
+    .config-section {
+        padding: 15px;
+    }
+
+    .start-test-button {
+        height: 45px;
+        font-size: 14px;
+    }
+}

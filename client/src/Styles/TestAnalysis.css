@@ -1,0 +1,105 @@
+/* Test Analysis Page Styles */
+
+.test-analysis-page {
+    padding: 24px;
+    background-color: #f0f2f5;
+    min-height: 100vh;
+}
+
+.test-analysis-page .ant-card {
+    margin-bottom: 16px;
+}
+
+.test-analysis-page .ant-statistic-title {
+    font-size: 14px;
+    color: #666;
+}
+
+.test-analysis-page .ant-statistic-content {
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.test-analysis-page .ant-table-small {
+    font-size: 13px;
+}
+
+.test-analysis-page .ant-tabs-tab {
+    font-size: 15px;
+    padding: 12px 20px;
+}
+
+/* Comparison Section */
+.test-analysis-page .ant-card-type-inner {
+    background-color: #fafafa;
+}
+
+.test-analysis-page .ant-card-type-inner .ant-card-head {
+    background-color: #e6f7ff;
+    border-bottom: 1px solid #91d5ff;
+}
+
+/* Alert Styling */
+.test-analysis-page .ant-alert {
+    margin-bottom: 16px;
+}
+
+/* Table Hover Effects */
+.test-analysis-page .ant-table-tbody > tr:hover > td {
+    background-color: #e6f7ff;
+}
+
+/* Statistic Cards */
+.test-analysis-page .ant-col .ant-card {
+    height: 100%;
+    transition: box-shadow 0.3s ease;
+}
+
+.test-analysis-page .ant-col .ant-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Tab Content Spacing */
+.test-analysis-page .ant-tabs-content {
+    padding-top: 16px;
+}
+
+/* Button Styles */
+.test-analysis-page .ant-btn-primary {
+    background-color: #1890ff;
+    border-color: #1890ff;
+}
+
+.test-analysis-page .ant-btn-primary:hover {
+    background-color: #40a9ff;
+    border-color: #40a9ff;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .test-analysis-page {
+        padding: 16px;
+    }
+
+    .test-analysis-page .ant-statistic-content {
+        font-size: 20px;
+    }
+
+    .test-analysis-page .ant-col {
+        margin-bottom: 16px;
+    }
+}
+
+@media (max-width: 480px) {
+    .test-analysis-page {
+        padding: 12px;
+    }
+
+    .test-analysis-page .ant-statistic-content {
+        font-size: 18px;
+    }
+
+    .test-analysis-page .ant-card {
+        margin-bottom: 12px;
+    }
+}

@@ -1,10 +1,21 @@
 import express from "express";
 import cors from "cors";
-import sensorsRouter from "./routes/sensor_routes";
-import testChoiceRouter from "./routes/test_choice_rotues";
-import testRouter from "./routes/test_routes";
-import serialRouter from "./routes/serial_manager_routes";
-import sensorEventsRouter from "./routes/sensorEvents_routes";
+import sensorsRouter from "./routes/sensor/sensor.routes";
+import testChoiceRouter from "./routes/test/test-choice.routes";
+import testRouter from "./routes/test/test.routes";
+import serialRouter from "./routes/hardware/serial-manager.routes";
+import standRouter from "./routes/hardware/stand.routes";
+import heatingRouter from "./routes/hardware/heating.routes";
+import environmentRouter from "./routes/hardware/environment.routes";
+import robotRouter from "./routes/hardware/robot.routes";
+import gridtestRouter from "./routes/gridtest/gridtest.routes";
+import exportRouter from "./routes/export/export.routes";
+import sensorEventsRouter from "./routes/sensor/sensor-events.routes";
+import testStepRouter from "./routes/test/test-step.routes";
+import masterTestRouter from "./routes/test/master-test.routes";
+import telemetryRouter from "./routes/telemetry/telemetry.routes"
+import analysisRouter from "./routes/analysis/analysis.routes";
+import timingRouter from "./routes/timing/timing.routes";
 import path from 'path';
 import dotenv from 'dotenv';
 
@@ -33,7 +44,18 @@ app.use("/api/sensors", sensorsRouter);
 app.use("/api/testchoice", testChoiceRouter);
 app.use("/api/test", testRouter);
 app.use("/api/serial", serialRouter);
+app.use("/api/stand", standRouter);
+app.use("/api/heating", heatingRouter);
+app.use("/api/environment", environmentRouter);
+app.use("/api/robot", robotRouter);
+app.use("/api/gridtest", gridtestRouter);
+app.use("/api/export", exportRouter);
 app.use("/api", sensorEventsRouter);
+app.use("/api/test-steps", testStepRouter);
+app.use("/api/master-test", masterTestRouter);
+app.use("/api/telemetry", telemetryRouter);
+app.use("/api/analysis", analysisRouter);
+app.use("/api/timing", timingRouter);
 
 const PORT = Number(process.env.SERVER_PORT ?? 3000);
 // Bind to 0.0.0.0 so other devices can reach it

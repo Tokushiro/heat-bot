@@ -36,7 +36,7 @@ export default function ControlPanel() {
         }
     };
 
-    const chekcIfSensorExist = async () => {
+    const checkIfSensorExists = async () => {
         try {
             const response = await api.get('/api/sensors/exists');
             return response.data.exists;
@@ -183,22 +183,22 @@ export default function ControlPanel() {
                                 title="Manual Control"
                                 desc="Direct control of robot movements and actions"
                                 button="Start Manual Control"
-                                path="/manualcontrol"
-                            />
-                        </Col>
+                                        path="/manualcontrol"
+                                    />
+                                </Col>
 
                         <Col xs={24} sm={12} md={8} lg={8} xl={7} xxl={6}>
                             <ModeCard
                                 icon={<ExperimentOutlined />}
                                 title="Start an new Test"
                                 desc="Execute predefined testing sequences with monitoring"
-                                customButton={
-                                    <Button
-                                        type="primary"
-                                        block
-                                        style={{ marginTop: 8, borderRadius: 8 }}
-                                        onClick={async () => {
-                                            const sensorExists = await chekcIfSensorExist();
+                                        customButton={
+                                            <Button
+                                                type="primary"
+                                                block
+                                                style={{ marginTop: 8, borderRadius: 8 }}
+                                                onClick={async () => {
+                                            const sensorExists = await checkIfSensorExists();
                                             const testChoiceExists = await checkIfTestChoiceExist();
                                             if (sensorExists && testChoiceExists) {
                                                 setOpen(true);

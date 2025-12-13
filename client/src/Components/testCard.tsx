@@ -1,12 +1,13 @@
 import { Card, Row, Col, Typography, Tag, Space, Button, Popconfirm } from "antd";
 import type { Test } from "../Types/test.ts";
 
-export type TestDB = Test & { status: "complete" | "incomplete" };
+export type TestDB = Test;
 
 export type TestCardProps = {
     test: TestDB;
     onContinue: () => void;
     onDelete: () => void;
+    isDeleting?: boolean;
 };
 
 function formatDate(d: Date) {
@@ -18,15 +19,57 @@ function formatDate(d: Date) {
     }
 }
 
-export default function TestCard({ test, onContinue, onDelete }: TestCardProps) {
-    const isComplete = test.status === "complete";
+export default function TestCard({ test, onContinue, onDelete, isDeleting = false }: TestCardProps) {
+    const status = test.status ?? 'PLANNED';
+    const isComplete = status === 'COMPLETED';
+    const isInProgress = status === 'IN_PROGRESS';
+    //const isError = status === 'ERROR';
+    const isPaused = status === 'PAUSED';
+
+    const getStatusColor = () => {
+        switch (status) {
+            case 'COMPLETED':
+                return 'green';
+            case 'IN_PROGRESS':
+                return 'blue';
+            case 'ERROR':
+                return 'red';
+            case 'PAUSED':
+                return 'orange';
+            case 'PLANNED':
+            default:
+                return 'default';
+        }
+    };
+
+    const getStatusDisplay = () => {
+        switch (status) {
+            case 'IN_PROGRESS':
+                return 'In Progress';
+            case 'COMPLETED':
+                return 'Completed';
+            case 'ERROR':
+                return 'Error';
+            case 'PAUSED':
+                return 'Paused';
+            case 'PLANNED':
+            default:
+                return 'Planned';
+        }
+    };
 
     return (
         <Card
             hoverable
             size="small"
-            style={{ width: "100%", borderRadius: 16, boxShadow: "0 8px 24px rgba(0,0,0,0.06)" }}
-            bodyStyle={{ padding: 20 }}
+            style={{
+                width: "100%",
+                borderRadius: 16,
+                boxShadow: "0 8px 24px rgba(0,0,0,0.06)",
+                opacity: isDeleting ? 0.6 : 1,
+                transition: "opacity 0.3s"
+            }}
+            styles={{ body: { padding: 20 } }}
         >
             <Row align="middle" gutter={[16, 12]}>
                 {/* Left: name + meta */}
@@ -35,12 +78,23 @@ export default function TestCard({ test, onContinue, onDelete }: TestCardProps) 
                         <Typography.Text strong style={{ fontSize: 18 }} ellipsis>
                             {test.test_name || "Untitled test"}
                         </Typography.Text>
-                        <Typography.Text type="secondary">Created: {formatDate(test.test_date)}</Typography.Text>
+                        <Typography.Text type="secondary">
+                            Created: {formatDate(test.test_date)}
+                        </Typography.Text>
+                        {test.started_at && (
+                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                Started: {formatDate(new Date(test.started_at))}
+                            </Typography.Text>
+                        )}
+                        {test.finished_at && (
+                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                Finished: {formatDate(new Date(test.finished_at))}
+                            </Typography.Text>
+                        )}
                     </Space>
                 </Col>
 
-
-                {/* Right: status + actions (right-aligned, wraps nicely on small screens) */}
+                {/* Right: status + actions */}
                 <Col xs={24} md={12}>
                     <div
                         style={{
@@ -53,31 +107,51 @@ export default function TestCard({ test, onContinue, onDelete }: TestCardProps) 
                         }}
                     >
                         <Tag
-                            color={isComplete ? "green" : "red"}
-                            style={{ borderRadius: 999, padding: "2px 10px", textTransform: "capitalize", fontWeight: 500 }}
+                            color={getStatusColor()}
+                            style={{
+                                borderRadius: 999,
+                                padding: "2px 10px",
+                                textTransform: "capitalize",
+                                fontWeight: 500
+                            }}
                         >
-                            {test.status}
+                            {getStatusDisplay()}
                         </Tag>
 
-
-                        <Button type="primary" onClick={onContinue} shape="round">
-                            Continue
+                        <Button
+                            type="primary"
+                            onClick={onContinue}
+                            shape="round"
+                            disabled={isDeleting}
+                        >
+                            {isComplete ? 'View' : isInProgress || isPaused ? 'Resume' : 'Start'}
                         </Button>
 
-
-                        <Button onClick={() => console.log("CSV Download") } shape="round">
+                        <Button
+                            onClick={() => console.log("CSV Download", test.test_id)}
+                            shape="round"
+                            disabled={!isComplete || isDeleting}
+                        >
                             CSV
                         </Button>
 
-
                         <Popconfirm
                             title="Delete this test?"
-                            description="This action cannot be undone."
+                            description="This will permanently delete the test and all associated data. This action cannot be undone."
                             okText="Delete"
-                            okButtonProps={{ danger: true }}
+                            cancelText="Cancel"
+                            okButtonProps={{ danger: true, loading: isDeleting }}
                             onConfirm={onDelete}
+                            disabled={isDeleting}
                         >
-                            <Button danger shape="round">Delete</Button>
+                            <Button
+                                danger
+                                shape="round"
+                                loading={isDeleting}
+                                disabled={isDeleting}
+                            >
+                                {isDeleting ? 'Deleting...' : 'Delete'}
+                            </Button>
                         </Popconfirm>
                     </div>
                 </Col>
