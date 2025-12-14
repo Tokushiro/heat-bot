@@ -164,8 +164,8 @@ export class SerialManager extends EventEmitter {
     private async verify(): Promise<boolean> {
         for (let i = 0; i < 5; i++) {
             try {
-                await this.send("conn");
-                const ok = await this.waitForLine("conn", 400);
+                await this.send("handshake");
+                const ok = await this.waitForLine("handshake_ok", 400);
                 if (ok) return true;
             } catch {
                 // retry
