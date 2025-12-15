@@ -11,6 +11,7 @@ CREATE TABLE sensor (
                         sw_version        VARCHAR(10),
                         mounting_height   DOUBLE PRECISION NOT NULL,
                         note              VARCHAR(25),
+                        connection_type   VARCHAR(10),
 
                         CONSTRAINT sensor_mounting_height_nonneg
                             CHECK (mounting_height >= 0)
@@ -42,9 +43,17 @@ CREATE TABLE test (
                       sensor_id   INT NOT NULL,
                       test_date   TIMESTAMP NOT NULL,
 
+                      -- Newer naming used by analysis/export features
+                      test_type   VARCHAR(20) DEFAULT 'FULL',
+
                       status      VARCHAR(20) NOT NULL DEFAULT 'PLANNED',
                       started_at  TIMESTAMP,
                       finished_at TIMESTAMP,
+
+                      -- Backwards/forwards-compatible aliases
+                      test_status VARCHAR(20) GENERATED ALWAYS AS (status) STORED,
+                      start_time  TIMESTAMP GENERATED ALWAYS AS (started_at) STORED,
+                      end_time    TIMESTAMP GENERATED ALWAYS AS (finished_at) STORED,
 
                       CONSTRAINT fk_test_choice
                           FOREIGN KEY (test_choice)
@@ -126,6 +135,12 @@ CREATE TABLE test_step (
                            status           VARCHAR(20) NOT NULL DEFAULT 'PENDING',
                            started_at       TIMESTAMP,
                            finished_at      TIMESTAMP,
+
+                           -- Newer naming used by analysis/export features
+                           repeat_number    INT GENERATED ALWAYS AS (sequence_no) STORED,
+                           distance_to_sensor DOUBLE PRECISION GENERATED ALWAYS AS (distance_1) STORED,
+                           detection_occurred BOOLEAN GENERATED ALWAYS AS (detection_final) STORED,
+                           recorded_at      TIMESTAMP GENERATED ALWAYS AS (finished_at) STORED,
 
                            CONSTRAINT fk_test_step_test
                                FOREIGN KEY (test_id)
@@ -460,33 +475,4 @@ SELECT
 FROM dead_time_log
 GROUP BY test_id, reason
 ORDER BY test_id, total_duration_ms DESC;
-
-ALTER TABLE test_state
-    ADD COLUMN execution_state VARCHAR(30) DEFAULT 'IDLE';
-
-COMMENT ON COLUMN test_state.execution_state IS 'Test execution state: IDLE, BOUNDARY_RUNNING, BOUNDARY_PAUSED, BOUNDARY_COMPLETE, TANGENTIAL_RUNNING, TANGENTIAL_PAUSED, TANGENTIAL_COMPLETE, RADIAL_RUNNING, RADIAL_PAUSED, RADIAL_COMPLETE, ALL_COMPLETE, ERROR';
-
--- Add grid cell coordinate columns to test_step table
--- These store the actual metric coordinates (in meters) of grid cell centers
--- Separate from cell_row/cell_col which are integer grid indices
-ALTER TABLE test_step
-    ADD COLUMN cell_x DOUBLE PRECISION,
-    ADD COLUMN cell_y DOUBLE PRECISION;
-
-COMMENT ON COLUMN test_step.cell_x IS 'Grid cell center X coordinate in meters (for GRID_TANGENTIAL tests)';
-COMMENT ON COLUMN test_step.cell_y IS 'Grid cell center Y coordinate in meters (for GRID_TANGENTIAL tests)';
-
--- Create index on grid coordinates for spatial queries
-CREATE INDEX idx_test_step_grid_coordinates
-    ON test_step (cell_x, cell_y)
-    WHERE cell_x IS NOT NULL AND cell_y IS NOT NULL;
-
--- Create index on execution_state for filtering
-CREATE INDEX idx_test_state_execution_state
-    ON test_state (execution_state);
-
--- Update existing records to have IDLE state
-UPDATE test_state
-SET execution_state = 'IDLE'
-WHERE execution_state IS NULL;
 
