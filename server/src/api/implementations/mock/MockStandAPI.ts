@@ -1,4 +1,5 @@
 import { IStandAPI, StandStatus, StandConfig } from '../../interfaces/IStandAPI';
+import { TimeUtility } from '../../../utils/TimeUtility';
 
 /**
  * Mock Stand Controller
@@ -211,10 +212,10 @@ export class MockStandAPI implements IStandAPI {
     }
 
     /**
-     * Simulate delay (for rotation time)
+     * Simulate delay (for rotation time) with simulation speed adjustment
      */
     private delay(ms: number): Promise<void> {
-        return new Promise(resolve => setTimeout(resolve, ms));
+        return TimeUtility.delay(ms);
     }
 
     /**

@@ -7,6 +7,7 @@ import {
     EnvironmentConfig,
     STANDARD_ENVIRONMENT_LIMITS
 } from '../../interfaces/IEnvironmentAPI';
+import { TimeUtility } from '../../../utils/TimeUtility';
 
 /**
  * Mock Environment Sensor
@@ -142,7 +143,7 @@ export class MockEnvironmentAPI implements IEnvironmentAPI {
     }
 
     /**
-     * Start continuous monitoring
+     * Start continuous monitoring with simulation speed adjustment
      */
     startMonitoring(interval: number = 1000, callback?: (reading: EnvironmentReading) => void): void {
         if (this.monitoring) {
@@ -150,7 +151,8 @@ export class MockEnvironmentAPI implements IEnvironmentAPI {
             return;
         }
 
-        console.log(`[MockEnvironment] Starting continuous monitoring (${interval}ms interval)`);
+        const adjustedInterval = TimeUtility.adjustInterval(interval);
+        console.log(`[MockEnvironment] Starting continuous monitoring (${interval}ms interval, adjusted: ${adjustedInterval}ms)`);
 
         this.monitoringCallback = callback;
         this.monitoring = true;
@@ -163,7 +165,7 @@ export class MockEnvironmentAPI implements IEnvironmentAPI {
             if (this.monitoringCallback) {
                 this.monitoringCallback(reading);
             }
-        }, interval);
+        }, adjustedInterval);
     }
 
     /**
@@ -372,10 +374,10 @@ export class MockEnvironmentAPI implements IEnvironmentAPI {
     }
 
     /**
-     * Delay helper
+     * Delay helper with simulation speed adjustment
      */
     private delay(ms: number): Promise<void> {
-        return new Promise(resolve => setTimeout(resolve, ms));
+        return TimeUtility.delay(ms);
     }
 
     /**

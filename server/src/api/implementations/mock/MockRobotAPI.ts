@@ -1,5 +1,6 @@
 import { EventEmitter } from "events";
 import { IRobotAPI, Position, MovementResult } from "../../interfaces/IRobotAPI";
+import { TimeUtility } from "../../../utils/TimeUtility";
 
 /**
  * Mock implementation of Robot API for testing without real hardware
@@ -358,10 +359,10 @@ export class MockRobotAPI extends EventEmitter implements IRobotAPI {
 
 
     /**
-     * Utility delay function
+     * Utility delay function with simulation speed adjustment
      */
     private delay(ms: number): Promise<void> {
-        return new Promise((resolve) => setTimeout(resolve, ms));
+        return TimeUtility.delay(ms);
     }
 
     /**
