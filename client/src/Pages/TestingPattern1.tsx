@@ -273,7 +273,12 @@ export default function TestingPattern1() {
         es.addEventListener("telemetry", (event) => {
             try {
                 const payload = JSON.parse((event as MessageEvent).data);
-                setLatestTelemetry(payload);
+                // Telemetry events can be partial (e.g., position-only updates).
+                // Merge to avoid flickering values to N/A when a field is absent.
+                setLatestTelemetry(prev => ({
+                    ...(prev ?? {}),
+                    ...payload
+                }));
             } catch (err) {
                 console.error("[TestingPattern1] Failed to parse telemetry event:", err);
             }

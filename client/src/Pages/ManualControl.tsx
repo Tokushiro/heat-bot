@@ -84,7 +84,11 @@ export default function ManualControl() {
         es.addEventListener("telemetry", (event) => {
             try {
                 const payload = JSON.parse((event as MessageEvent).data);
-                setTelemetry(payload);
+                // Telemetry events can be partial; merge to keep previously-known values.
+                setTelemetry(prev => ({
+                    ...(prev ?? {}),
+                    ...payload
+                }));
             } catch (err) {
                 console.error("[ManualControl] Failed to parse telemetry:", err);
             }

@@ -1,6 +1,8 @@
 import { EventEmitter } from "events";
 import { RobotAPIFactory } from "../../api/factories/RobotAPIFactory";
 import { SensorAPIFactory } from "../../api/factories/SensorAPIFactory";
+import { EnvironmentAPIFactory } from "../../api/factories/EnvironmentAPIFactory";
+import { HeatingAPIFactory } from "../../api/factories/HeatingAPIFactory";
 import { RobotSensorIntegration } from "../../api/implementations/mock/RobotSensorIntegration";
 import bleEventBus, { DetectionEvent } from "../core/BleEventBus";
 import { TelemetryService } from "../telemetry/TelemetryService";
@@ -8,6 +10,7 @@ import * as testService from "./TestService";
 import * as testStepService from "./TestStepService";
 import pool from "../../db_conn";
 import { TimeUtility } from "../../utils/TimeUtility";
+import { STANDARD_TEMP_OFFSETS } from "../../api/interfaces/IHeatingAPI";
 
 // =============================================================================
 // IEC 63180 HARDCODED TEST PARAMETERS
@@ -251,6 +254,9 @@ export class MasterTestOrchestrator extends EventEmitter {
             await this.saveTestState();
             await testService.updateTestStatus(config.test_id, 'IN_PROGRESS', new Date());
 
+            // Initialize environment + heating simulation for live telemetry and IEC compliance
+            await this.ensureHeatingAndEnvironmentInitialized();
+
             // Initialize hardware
             console.log("[MasterTest] Initializing robot...");
             const robot = RobotAPIFactory.getInstance();
@@ -345,6 +351,9 @@ export class MasterTestOrchestrator extends EventEmitter {
             console.log(`\n🎯 [MasterTest] STARTING ${phaseName.toUpperCase()} TEST`);
 
             await testService.updateTestStatus(this.currentTest.test_id, 'IN_PROGRESS');
+
+            // Ensure simulations are running even if phase is started later
+            await this.ensureHeatingAndEnvironmentInitialized();
 
             // Emit phase started event
             this.emit(`${testType.toLowerCase()}_test_started`, {
@@ -1248,6 +1257,32 @@ export class MasterTestOrchestrator extends EventEmitter {
 
     private delay(ms: number): Promise<void> {
         return TimeUtility.delay(ms);
+    }
+
+    private async ensureHeatingAndEnvironmentInitialized(): Promise<void> {
+        const environment = EnvironmentAPIFactory.getEnvironmentAPI();
+        if (!environment.isReady()) {
+            console.log("[MasterTest] Initializing environment simulation...");
+            await environment.initialize();
+        }
+        if (!environment.isMonitoring()) {
+            environment.startMonitoring(1000);
+        }
+
+        const heating = HeatingAPIFactory.getHeatingAPI();
+        if (!heating.isReady()) {
+            console.log("[MasterTest] Initializing heating simulation...");
+            await heating.initialize();
+        }
+
+        const ambientTemp = environment.getTemperature();
+        heating.setAmbientTemperature(ambientTemp);
+
+        await heating.setTemperatureOffset('HEAD', STANDARD_TEMP_OFFSETS.HEAD);
+        await heating.setTemperatureOffset('BODY', STANDARD_TEMP_OFFSETS.BODY);
+        await heating.setTemperatureOffset('LEGS', STANDARD_TEMP_OFFSETS.LEGS);
+
+        await heating.enableAllZones();
     }
 
     // =========================================================================
