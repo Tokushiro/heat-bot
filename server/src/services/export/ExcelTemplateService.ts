@@ -1,9 +1,5 @@
 import ExcelJS from 'exceljs';
 
-/**
- * Excel Template Service - IEC 63180 Professional Report Generator
- * Generates multi-tab Excel reports matching professional PIR sensor test templates
- */
 
 type CellAddr = { r: number; c: number };
 

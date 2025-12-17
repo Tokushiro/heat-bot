@@ -10,19 +10,7 @@ import {
 import { StandAPIFactory } from '../../factories/StandAPIFactory';
 import { EnvironmentAPIFactory } from '../../factories/EnvironmentAPIFactory';
 
-/**
- * Mock Grid Test API
- *
- * Simulates grid-based detector coverage testing without requiring real robot movement.
- * Features realistic test execution including:
- * - Grid generation and position calculation
- * - Sequential cell testing with stand rotation
- * - Simulated detection events based on position/angle
- * - Progress tracking and result aggregation
- * - Integration with stand and environment APIs
- *
- * Used for development, testing, and demonstration purposes.
- */
+
 export class MockGridTestAPI implements IGridTestAPI {
     private static instance: MockGridTestAPI;
 

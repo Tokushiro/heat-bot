@@ -9,12 +9,6 @@ import {
 
 const router = Router();
 
-/**
- * Analysis Routes
- *
- * Advanced statistical analysis endpoints for test data
- */
-
 // Angular statistics for a test
 router.get('/angular/:testId', getAngularStatistics);
 

@@ -2,16 +2,6 @@ import React, { useState } from 'react';
 import { Card, Radio, InputNumber, Space, Button, Divider, Alert } from 'antd';
 import '../Styles/TestProfileSelector.css';
 
-/**
- * Test Profile Selector Component
- *
- * Allows users to select test profile and configure parameters:
- * - Boundary Detection - Tangential
- * - Movement Detection - Tangential (Grid)
- * - Movement Detection - Radial (Polar)
- *
- * Each profile has specific configuration options based on IEC standards.
- */
 
 export type TestProfile = 'BOUNDARY_TANGENTIAL' | 'GRID_TANGENTIAL' | 'RADIAL_POLAR';
 

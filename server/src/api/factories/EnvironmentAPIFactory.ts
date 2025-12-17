@@ -2,17 +2,6 @@ import { IEnvironmentAPI } from '../interfaces/IEnvironmentAPI';
 import { MockEnvironmentAPI } from '../implementations/mock/MockEnvironmentAPI';
 import { RealEnvironmentAPI } from '../implementations/real/RealEnvironmentAPI';
 
-/**
- * Environment API Factory
- *
- * Creates the appropriate environment sensor implementation based on configuration.
- * Uses singleton pattern to ensure only one instance exists.
- *
- * Environment Variables:
- * - USE_MOCK_ENVIRONMENT: Set to 'true' to use mock implementation (default)
- * - ENVIRONMENT_PORT: I2C/Serial port for real sensor (e.g., '/dev/i2c-1')
- * - ENVIRONMENT_SENSOR_TYPE: Sensor type (DHT22, BME280, SHT31, etc.)
- */
 export class EnvironmentAPIFactory {
     private static instance: IEnvironmentAPI | null = null;
 

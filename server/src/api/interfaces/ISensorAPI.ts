@@ -4,11 +4,11 @@ import { EventEmitter } from "events";
  * Detection zone configuration for simulating sensor behavior
  */
 export interface DetectionZoneConfig {
-    minDistance: number;        // Minimum detection distance (meters)
-    maxDistance: number;        // Maximum detection distance (meters)
-    minAngle: number;          // Minimum detection angle (degrees, 0-360)
-    maxAngle: number;          // Maximum detection angle (degrees, 0-360)
-    detectionProbability?: number; // 0-1, probability of detection in zone (default 0.95)
+    minDistance: number;
+    maxDistance: number;
+    minAngle: number;
+    maxAngle: number;
+    detectionProbability?: number;
 }
 
 /**
@@ -17,10 +17,10 @@ export interface DetectionZoneConfig {
 export interface SensorConfig {
     sensorId: string;
     mac: string;
-    mountingHeight?: number;    // Height in meters (default 1.7m per spec)
+    mountingHeight?: number;
     detectionZones?: DetectionZoneConfig[];
-    ambientTemp?: number;       // Ambient temperature (°C)
-    humidity?: number;          // Humidity percentage (70% required per spec)
+    ambientTemp?: number;
+    humidity?: number;
 }
 
 /**
@@ -30,9 +30,9 @@ export interface DetectionResult {
     detected: boolean;
     timestamp: string;
     raw: number[];
-    confidence?: number;        // 0-1, detection confidence
-    distance?: number;          // Estimated distance (if available)
-    angle?: number;            // Estimated angle (if available)
+    confidence?: number;
+    distance?: number;
+    angle?: number;
 }
 
 /**
@@ -48,9 +48,7 @@ export interface SensorStatus {
     lastDetection?: string;
 }
 
-/**
- * Interface for Sensor API - both real and mock implementations
- */
+
 export interface ISensorAPI extends EventEmitter {
     /**
      * Initialize sensor connection

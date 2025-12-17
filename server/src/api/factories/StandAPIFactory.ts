@@ -2,16 +2,7 @@ import { IStandAPI } from '../interfaces/IStandAPI';
 import { MockStandAPI } from '../implementations/mock/MockStandAPI';
 import { RealStandAPI } from '../implementations/real/RealStandAPI';
 
-/**
- * Stand API Factory
- *
- * Creates the appropriate stand controller implementation based on environment configuration.
- * Uses singleton pattern to ensure only one instance exists.
- *
- * Environment Variables:
- * - USE_MOCK_STAND: Set to 'true' to use mock implementation (default)
- * - STAND_SERIAL_PORT: Serial port for real stand (e.g., '/dev/ttyUSB0')
- */
+
 export class StandAPIFactory {
     private static instance: IStandAPI | null = null;
 

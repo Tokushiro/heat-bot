@@ -2,17 +2,7 @@ import { Request, Response } from 'express';
 import { EnvironmentAPIFactory } from '../../api/factories/EnvironmentAPIFactory';
 import { TelemetryService } from '../../services/telemetry/TelemetryService';
 
-/**
- * Environment Controller
- *
- * REST API controller for environmental monitoring (temperature, humidity).
- * Provides endpoints for reading ambient conditions during tests.
- */
 
-/**
- * Initialize the environment sensor
- * POST /api/environment/initialize
- */
 export async function initialize(req: Request, res: Response) {
     try {
         console.log('[EnvironmentController] Initialize request received');
@@ -35,10 +25,7 @@ export async function initialize(req: Request, res: Response) {
     }
 }
 
-/**
- * Get current temperature
- * GET /api/environment/temperature
- */
+
 export async function getTemperature(req: Request, res: Response) {
     try {
         const environment = EnvironmentAPIFactory.getEnvironmentAPI();
@@ -68,10 +55,7 @@ export async function getTemperature(req: Request, res: Response) {
     }
 }
 
-/**
- * Get current humidity
- * GET /api/environment/humidity
- */
+
 export async function getHumidity(req: Request, res: Response) {
     try {
         const environment = EnvironmentAPIFactory.getEnvironmentAPI();
@@ -101,10 +85,7 @@ export async function getHumidity(req: Request, res: Response) {
     }
 }
 
-/**
- * Get complete environmental reading
- * GET /api/environment/reading
- */
+
 export async function getReading(req: Request, res: Response) {
     try {
         const environment = EnvironmentAPIFactory.getEnvironmentAPI();
@@ -120,11 +101,7 @@ export async function getReading(req: Request, res: Response) {
     }
 }
 
-/**
- * Get reading history
- * GET /api/environment/history
- * Query params: count (default 100)
- */
+
 export async function getHistory(req: Request, res: Response) {
     try {
         const count = req.query.count ? parseInt(req.query.count as string, 10) : 100;
@@ -149,11 +126,7 @@ export async function getHistory(req: Request, res: Response) {
     }
 }
 
-/**
- * Start continuous monitoring
- * POST /api/environment/start-monitoring
- * Body: { interval?: number } (milliseconds)
- */
+
 export async function startMonitoring(req: Request, res: Response) {
     try {
         const { interval } = req.body;
@@ -187,10 +160,7 @@ export async function startMonitoring(req: Request, res: Response) {
     }
 }
 
-/**
- * Stop continuous monitoring
- * POST /api/environment/stop-monitoring
- */
+
 export async function stopMonitoring(req: Request, res: Response) {
     try {
         console.log('[EnvironmentController] Stopping monitoring');
@@ -213,10 +183,7 @@ export async function stopMonitoring(req: Request, res: Response) {
     }
 }
 
-/**
- * Get sensor status
- * GET /api/environment/status
- */
+
 export async function getStatus(req: Request, res: Response) {
     try {
         const environment = EnvironmentAPIFactory.getEnvironmentAPI();
@@ -232,11 +199,7 @@ export async function getStatus(req: Request, res: Response) {
     }
 }
 
-/**
- * Set temperature calibration offset
- * POST /api/environment/calibrate-temperature
- * Body: { offset: number }
- */
+
 export async function calibrateTemperature(req: Request, res: Response) {
     try {
         const { offset } = req.body;
@@ -265,11 +228,7 @@ export async function calibrateTemperature(req: Request, res: Response) {
     }
 }
 
-/**
- * Set humidity calibration offset
- * POST /api/environment/calibrate-humidity
- * Body: { offset: number }
- */
+
 export async function calibrateHumidity(req: Request, res: Response) {
     try {
         const { offset } = req.body;
@@ -298,10 +257,7 @@ export async function calibrateHumidity(req: Request, res: Response) {
     }
 }
 
-/**
- * Validate environmental conditions
- * GET /api/environment/validate
- */
+
 export async function validateConditions(req: Request, res: Response) {
     try {
         const environment = EnvironmentAPIFactory.getEnvironmentAPI();
@@ -317,10 +273,7 @@ export async function validateConditions(req: Request, res: Response) {
     }
 }
 
-/**
- * Disconnect sensor
- * POST /api/environment/disconnect
- */
+
 export async function disconnect(req: Request, res: Response) {
     try {
         console.log('[EnvironmentController] Disconnect request');

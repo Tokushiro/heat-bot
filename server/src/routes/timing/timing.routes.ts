@@ -9,12 +9,6 @@ import {
 
 const router = Router();
 
-/**
- * Timing Routes
- *
- * Dead time and timing analysis endpoints
- */
-
 // Dead time summary for a test
 router.get('/summary/:testId', getDeadTimeSummary);
 

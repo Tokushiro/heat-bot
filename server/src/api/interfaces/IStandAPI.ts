@@ -1,15 +1,3 @@
-/**
- * Stand Controller Interface
- *
- * Provides abstraction for controlling the rotating stand that holds the PIR detector.
- * The stand can rotate the detector to any angle (0-360°) for testing at different orientations.
- *
- * Used for:
- * - Boundary detection at multiple angles (e.g., every 10°)
- * - Manual detector positioning during calibration
- * - Automated test procedures requiring specific detector angles
- */
-
 export interface IStandAPI {
     /**
      * Initialize the stand controller

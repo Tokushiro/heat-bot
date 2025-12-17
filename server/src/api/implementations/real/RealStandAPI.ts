@@ -1,15 +1,6 @@
 import { IStandAPI, StandStatus, StandConfig } from '../../interfaces/IStandAPI';
 import { SerialManager } from '../../../services/core/SerialManager';
 
-/**
- * Real Stand Controller
- *
- * Controls the rotating detector stand via SerialManager.
- * All commands are sent through the single serial connection.
- *
- * Commands follow the format: stand_<command>[:<params>]
- * See SERIAL_PROTOCOL_SPECIFICATION.md for details.
- */
 export class RealStandAPI implements IStandAPI {
     private static instance: RealStandAPI;
     private serialManager: SerialManager;

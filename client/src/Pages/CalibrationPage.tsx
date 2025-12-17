@@ -11,15 +11,6 @@ import {
 } from '@ant-design/icons';
 import '../Styles/CalibrationPage.css';
 
-/**
- * Calibration Page
- *
- * Comprehensive calibration interface for all hardware subsystems:
- * - Heater zone calibration
- * - Stand angle calibration
- * - Sensor detection zone calibration
- * - Connection diagnostics
- */
 
 interface HeatingStatus {
     connected: boolean;

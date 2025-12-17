@@ -1,32 +1,8 @@
-/**
- * Grid Test API Interface
- *
- * Manages grid-based movement testing for detector coverage analysis.
- * Tests are conducted on a 0.5m × 0.5m grid overlaid on the detector's detection area.
- *
- * Test Area Specifications:
- * - Grid cell size: 0.5m × 0.5m
- * - Typical test area: 3m × 3m (36 cells)
- * - Coordinate system: Cartesian (x, y) with center at (0, 0)
- * - Stand rotation: 0-360° for each grid position
- *
- * Testing Process:
- * 1. Define grid dimensions and cell size
- * 2. Generate grid positions
- * 3. Move detector to each grid cell sequentially
- * 4. At each position, rotate stand through full 360°
- * 5. Record detection events and telemetry
- * 6. Analyze coverage and create visualization
- */
-
-/**
- * Grid position in Cartesian coordinates
- */
 export interface GridPosition {
-    x: number;           // X coordinate in meters
-    y: number;           // Y coordinate in meters
-    cellX: number;       // Cell index in X direction
-    cellY: number;       // Cell index in Y direction
+    x: number;
+    y: number;
+    cellX: number;
+    cellY: number;
 }
 
 /**
@@ -34,22 +10,22 @@ export interface GridPosition {
  */
 export interface GridCellResult {
     position: GridPosition;
-    testId: number;                  // Associated test ID
+    testId: number;
     startTime: Date;
     endTime?: Date;
 
     // Detection results
-    detectionCount: number;          // Total detections at this cell
-    anglesCovered: number[];         // Stand angles where detection occurred
-    coveragePercent: number;         // Percentage of angles with detection
+    detectionCount: number;
+    anglesCovered: number[];
+    coveragePercent: number;
 
     // Environmental conditions
-    avgTemperature?: number;         // Average temperature during test
-    avgHumidity?: number;            // Average humidity during test
+    avgTemperature?: number;
+    avgHumidity?: number;
 
     // Status
     completed: boolean;
-    passed: boolean;                 // True if coverage meets threshold
+    passed: boolean;
     error?: string;
 }
 
@@ -58,23 +34,22 @@ export interface GridCellResult {
  */
 export interface GridTestConfig {
     // Grid dimensions
-    gridWidth: number;               // Width in meters
-    gridHeight: number;              // Height in meters
-    cellSize: number;                // Cell size in meters (default 0.5)
+    gridWidth: number;
+    gridHeight: number;
+    cellSize: number;
 
     // Test parameters
-    angleStep: number;               // Stand rotation step in degrees (default 10)
-    dwellTime: number;               // Time to wait at each angle in ms (default 2000)
-    coverageThreshold: number;       // Required coverage % to pass (default 80)
+    angleStep: number;
+    dwellTime: number;
+    coverageThreshold: number;
 
     // Movement parameters
-    movementSpeed?: number;          // Robot movement speed in m/s
-    settlementDelay?: number;        // Delay after movement before testing in ms
-
+    movementSpeed?: number;
+    settlementDelay?: number;
     // Test settings
-    testId: number;                  // Associated test ID
-    detectorId?: number;             // Detector being tested
-    continuousMonitoring?: boolean;  // Enable continuous telemetry during test
+    testId: number;
+    detectorId?: number;
+    continuousMonitoring?: boolean;
 }
 
 /**
@@ -100,21 +75,21 @@ export interface GridTestResult {
 
     // Overall statistics
     totalDetections: number;
-    averageCoverage: number;         // Average coverage across all cells
+    averageCoverage: number;
     cellsPassed: number;
     cellsFailed: number;
 
     // Coverage map
-    coverageMap: number[][];         // 2D array of coverage percentages
+    coverageMap: number[][];
 
     // Timing
     startTime: Date;
     endTime: Date;
-    totalDuration: number;           // In seconds
+    totalDuration: number;
 
     // Status
     completed: boolean;
-    passed: boolean;                 // True if all cells meet threshold
+    passed: boolean;
 }
 
 /**

@@ -2,18 +2,7 @@ import { Request, Response } from 'express';
 import { TelemetryService } from '../../services/telemetry/TelemetryService';
 import { telemetryEventBus } from '../../services/telemetry/TelemetryEventBus';
 
-/**
- * Telemetry Controller
- *
- * REST API controller for telemetry data operations.
- * Provides endpoints for recording and retrieving real-time test data.
- */
 
-/**
- * Record a telemetry sample
- * POST /api/telemetry/record
- * Body: TelemetrySample
- */
 export async function recordSample(req: Request, res: Response) {
     try {
         const sample = req.body;
@@ -39,11 +28,7 @@ export async function recordSample(req: Request, res: Response) {
     }
 }
 
-/**
- * Get telemetry samples for a test
- * GET /api/telemetry/test/:testId
- * Query params: limit, offset
- */
+
 export async function getSamplesForTest(req: Request, res: Response) {
     try {
         const testId = parseInt(req.params.testId, 10);
@@ -72,10 +57,7 @@ export async function getSamplesForTest(req: Request, res: Response) {
     }
 }
 
-/**
- * Get latest telemetry sample for a test
- * GET /api/telemetry/test/:testId/latest
- */
+
 export async function getLatestSample(req: Request, res: Response) {
     try {
         const testId = parseInt(req.params.testId, 10);
@@ -100,10 +82,7 @@ export async function getLatestSample(req: Request, res: Response) {
     }
 }
 
-/**
- * Get telemetry summary for a test
- * GET /api/telemetry/test/:testId/summary
- */
+
 export async function getSummary(req: Request, res: Response) {
     try {
         const testId = parseInt(req.params.testId, 10);
@@ -128,11 +107,7 @@ export async function getSummary(req: Request, res: Response) {
     }
 }
 
-/**
- * Get telemetry samples by time range
- * GET /api/telemetry/test/:testId/range
- * Query params: start (ISO datetime), end (ISO datetime)
- */
+
 export async function getSamplesByTimeRange(req: Request, res: Response) {
     try {
         const testId = parseInt(req.params.testId, 10);
@@ -172,10 +147,7 @@ export async function getSamplesByTimeRange(req: Request, res: Response) {
     }
 }
 
-/**
- * Get telemetry samples for a test step
- * GET /api/telemetry/step/:testStepId
- */
+
 export async function getSamplesForStep(req: Request, res: Response) {
     try {
         const testStepId = parseInt(req.params.testStepId, 10);
@@ -200,10 +172,7 @@ export async function getSamplesForStep(req: Request, res: Response) {
     }
 }
 
-/**
- * Export telemetry to CSV
- * GET /api/telemetry/test/:testId/export
- */
+
 export async function exportCSV(req: Request, res: Response) {
     try {
         const testId = parseInt(req.params.testId, 10);
@@ -227,10 +196,7 @@ export async function exportCSV(req: Request, res: Response) {
     }
 }
 
-/**
- * Get sample count for a test
- * GET /api/telemetry/test/:testId/count
- */
+
 export async function getSampleCount(req: Request, res: Response) {
     try {
         const testId = parseInt(req.params.testId, 10);
@@ -254,10 +220,7 @@ export async function getSampleCount(req: Request, res: Response) {
     }
 }
 
-/**
- * Delete telemetry samples for a test
- * DELETE /api/telemetry/test/:testId
- */
+
 export async function deleteSamples(req: Request, res: Response) {
     try {
         const testId = parseInt(req.params.testId, 10);
@@ -282,10 +245,7 @@ export async function deleteSamples(req: Request, res: Response) {
     }
 }
 
-/**
- * Server-Sent Events stream for real-time telemetry updates.
- * Optional query param: testId (number) to filter events by test.
- */
+
 export function streamTelemetry(req: Request, res: Response) {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');

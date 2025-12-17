@@ -2,7 +2,7 @@ import { SerialManager } from "../../../services/core/SerialManager"
 import { EventEmitter } from "events";
 import { IRobotAPI, Position, MovementResult } from "../../interfaces/IRobotAPI";
 
-// Re-export for backward compatibility
+
 export { Position, MovementResult };
 
 export class RobotAPI extends EventEmitter implements IRobotAPI {

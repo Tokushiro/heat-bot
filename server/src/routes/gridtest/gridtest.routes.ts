@@ -18,13 +18,6 @@ import {
 
 const router = Router();
 
-/**
- * Grid Test Routes
- *
- * Endpoints for grid-based detector coverage testing.
- * Manages test execution, position control, and result retrieval.
- */
-
 // Lifecycle management
 router.post('/initialize', initialize);
 router.post('/disconnect', disconnect);

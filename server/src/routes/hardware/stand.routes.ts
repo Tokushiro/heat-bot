@@ -3,10 +3,6 @@ import * as standController from '../../controllers/hardware/StandController';
 
 const router = Router();
 
-/**
- * Stand Control Routes
- * Base path: /api/stand
- */
 
 // Initialize stand
 router.post('/initialize', standController.initialize);

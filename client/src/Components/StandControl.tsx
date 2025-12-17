@@ -10,11 +10,7 @@ type StandStatus = {
     isMoving?: boolean;
 };
 
-/**
- * StandControl
- *
- * Lightweight stand angle control with status, quick step, and go-to-angle.
- */
+
 const StandControl = () => {
     const [status, setStatus] = useState<StandStatus | null>(null);
     const [targetAngle, setTargetAngle] = useState<number>(0);

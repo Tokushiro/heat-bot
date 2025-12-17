@@ -2,13 +2,7 @@ import { EventEmitter } from "events";
 import { IRobotAPI, Position, MovementResult } from "../../interfaces/IRobotAPI";
 import { TimeUtility } from "../../../utils/TimeUtility";
 
-/**
- * Mock implementation of Robot API for testing without real hardware
- * Simulates H.E.A.T. Bot movement including:
- * - Rotating Arm (76mm × 76mm × 380mm, mounted at 750mm height)
- * - Movement speeds (0.5 m/s standard test speed)
- * - Realistic timing delays
- */
+
 export class MockRobotAPI extends EventEmitter implements IRobotAPI {
     private static _instance: MockRobotAPI;
     private currentPosition: Position = { x: 0, y: 0, angle: 0 };

@@ -9,16 +9,7 @@ import {
 import bleEventBus, { DetectionEvent } from "../../../services/core/BleEventBus";
 import { TimeUtility } from "../../../utils/TimeUtility";
 
-/**
- * Mock Sensor API implementation for testing without real hardware
- * Simulates PIR motion sensor behavior with configurable detection zones
- *
- * Based on test specifications:
- * - Mounting height: 1.7m ± 0.05m (ambient sensor spec)
- * - Detection range: Configurable (typical 0-12m for PIR)
- * - Coverage: 360° or configurable zones
- * - Ambient conditions: 70% humidity required
- */
+
 export class MockSensorAPI extends EventEmitter implements ISensorAPI {
     private static _instance: MockSensorAPI;
     private config: SensorConfig | null = null;

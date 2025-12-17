@@ -1,12 +1,3 @@
-/**
- * Integration layer between Robot and Sensor for mock mode
- *
- * In mock mode, this service listens to robot movements and automatically
- * triggers sensor detection checks at the robot's position.
- *
- * In real mode, this service does nothing (real sensor detects independently).
- */
-
 import { RobotAPIFactory } from "../../factories/RobotAPIFactory";
 import { SensorAPIFactory } from "../../factories/SensorAPIFactory";
 import { MockSensorAPI } from "./MockSensorAPI";

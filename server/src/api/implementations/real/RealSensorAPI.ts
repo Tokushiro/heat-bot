@@ -7,11 +7,7 @@ import {
 } from "../../interfaces/ISensorAPI";
 import bleEventBus, { DetectionEvent } from "../../../services/core/BleEventBus";
 
-/**
- * Real Sensor API implementation
- * Wraps the existing BLE event system for PIR motion sensors
- * Receives detection events from external BLE hardware via HTTP endpoint
- */
+
 export class RealSensorAPI extends EventEmitter implements ISensorAPI {
     private static _instance: RealSensorAPI;
     private config: SensorConfig | null = null;

@@ -11,12 +11,7 @@ export class RobotAPIFactory {
     private static _instance: IRobotAPI | null = null;
     private static listenersAttached = false;
 
-    /**
-     * Get singleton instance of Robot API (either real or mock)
-     * Controlled by USE_MOCK_ROBOT environment variable
-     * - "true" = Use mock implementation (no real hardware)
-     * - "false" or undefined = Use real implementation
-     */
+
     static getInstance(): IRobotAPI {
         if (!this._instance) {
             // Default to mock unless explicitly disabled

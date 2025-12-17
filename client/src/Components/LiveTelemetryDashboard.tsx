@@ -1,19 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import '../Styles/LiveTelemetryDashboard.css';
 
-/**
- * Live Telemetry Dashboard
- *
- * Real-time monitoring dashboard for all hardware systems during testing.
- * Displays:
- * - Environmental conditions (temperature, humidity)
- * - Heating zone status and temperatures
- * - Stand angle and movement status
- * - Grid test progress
- * - System health indicators
- *
- * Auto-refreshes data at configurable interval (default 1 second).
- */
 
 interface EnvironmentStatus {
     connected: boolean;

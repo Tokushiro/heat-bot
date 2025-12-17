@@ -8,19 +8,7 @@ import {
 } from '../../interfaces/IHeatingAPI';
 import { TimeUtility } from '../../../utils/TimeUtility';
 
-/**
- * Mock Heating Controller
- *
- * Simulates a thermal manikin heating system without requiring real hardware.
- * Features realistic temperature simulation including:
- * - Heating rate (gradual temperature increase)
- * - Cooling rate (gradual temperature decrease when disabled)
- * - Temperature stabilization around target
- * - Power level control
- * - Temperature statistics tracking
- *
- * Used for development, testing, and demonstration purposes.
- */
+
 export class MockHeatingAPI implements IHeatingAPI {
     private static instance: MockHeatingAPI;
 

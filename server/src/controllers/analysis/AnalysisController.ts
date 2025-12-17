@@ -2,16 +2,7 @@ import { Request, Response } from 'express';
 import { StatisticalAnalysisService } from '../../services/analysis/StatisticalAnalysisService';
 import pool from '../../db_conn';
 
-/**
- * Analysis Controller
- *
- * REST API endpoints for advanced statistical analysis of test data
- */
 
-/**
- * Get angular statistics for a test
- * GET /api/analysis/angular/:testId
- */
 export async function getAngularStatistics(req: Request, res: Response) {
     try {
         const testId = parseInt(req.params.testId, 10);
@@ -60,10 +51,7 @@ export async function getAngularStatistics(req: Request, res: Response) {
     }
 }
 
-/**
- * Get detection probability analysis for a test
- * GET /api/analysis/detection-probability/:testId
- */
+
 export async function getDetectionProbabilityAnalysis(req: Request, res: Response) {
     try {
         const testId = parseInt(req.params.testId, 10);
