@@ -8,7 +8,11 @@
  * - Data acquisition timing
  *
  * Dead time = minimum required pause between consecutive measurements
+ *
+ * Note: All timing is automatically adjusted by SIMULATION_SPEED environment variable
  */
+
+import { TimeUtility } from '../../utils/TimeUtility';
 
 export enum DeadTimeReason {
     SENSOR_RECOVERY = 'SENSOR_RECOVERY',      // PIR sensor reset time
@@ -241,10 +245,12 @@ export class DeadTimeManager {
     }
 
     /**
-     * Generic wait with logging
+     * Generic wait with logging and simulation speed adjustment
      */
     private async wait(durationMs: number, reason: DeadTimeReason, metadata?: any): Promise<void> {
         if (durationMs <= 0) return;
+
+        const adjustedDuration = TimeUtility.adjustDelay(durationMs);
 
         const log: DeadTimeLog = {
             timestamp: new Date(),
@@ -258,11 +264,11 @@ export class DeadTimeManager {
         this.logs.push(log);
 
         console.log(
-            `[DeadTimeManager] Waiting ${durationMs}ms for ${reason}` +
+            `[DeadTimeManager] Waiting ${durationMs}ms (adjusted: ${adjustedDuration}ms) for ${reason}` +
             (metadata?.testId ? ` (test ${metadata.testId})` : '')
         );
 
-        await new Promise(resolve => setTimeout(resolve, durationMs));
+        await TimeUtility.delay(durationMs);
     }
 
     /**

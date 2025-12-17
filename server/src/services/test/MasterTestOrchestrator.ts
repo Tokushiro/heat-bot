@@ -7,6 +7,7 @@ import { TelemetryService } from "../telemetry/TelemetryService";
 import * as testService from "./TestService";
 import * as testStepService from "./TestStepService";
 import pool from "../../db_conn";
+import { TimeUtility } from "../../utils/TimeUtility";
 
 // =============================================================================
 // IEC 63180 HARDCODED TEST PARAMETERS
@@ -1246,7 +1247,7 @@ export class MasterTestOrchestrator extends EventEmitter {
     }
 
     private delay(ms: number): Promise<void> {
-        return new Promise((resolve) => setTimeout(resolve, ms));
+        return TimeUtility.delay(ms);
     }
 
     // =========================================================================

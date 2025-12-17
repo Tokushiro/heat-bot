@@ -6,6 +6,7 @@ import {
     HeatingConfig,
     STANDARD_TEMP_OFFSETS
 } from '../../interfaces/IHeatingAPI';
+import { TimeUtility } from '../../../utils/TimeUtility';
 
 /**
  * Mock Heating Controller
@@ -124,16 +125,19 @@ export class MockHeatingAPI implements IHeatingAPI {
     }
 
     /**
-     * Start temperature simulation
+     * Start temperature simulation with simulation speed adjustment
      */
     private startSimulation(): void {
         if (this.simulationInterval) {
             clearInterval(this.simulationInterval);
         }
 
+        const adjustedInterval = TimeUtility.adjustInterval(this.config.updateInterval);
         this.simulationInterval = setInterval(() => {
             this.updateTemperatures();
-        }, this.config.updateInterval);
+        }, adjustedInterval);
+
+        console.log(`[MockHeating] Temperature update interval: ${this.config.updateInterval}ms (adjusted: ${adjustedInterval}ms)`);
     }
 
     /**
@@ -447,10 +451,10 @@ export class MockHeatingAPI implements IHeatingAPI {
     }
 
     /**
-     * Delay helper
+     * Delay helper with simulation speed adjustment
      */
     private delay(ms: number): Promise<void> {
-        return new Promise(resolve => setTimeout(resolve, ms));
+        return TimeUtility.delay(ms);
     }
 }
 

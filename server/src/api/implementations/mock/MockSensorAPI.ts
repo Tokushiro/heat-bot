@@ -7,6 +7,7 @@ import {
     DetectionZoneConfig
 } from "../../interfaces/ISensorAPI";
 import bleEventBus, { DetectionEvent } from "../../../services/core/BleEventBus";
+import { TimeUtility } from "../../../utils/TimeUtility";
 
 /**
  * Mock Sensor API implementation for testing without real hardware
@@ -266,14 +267,15 @@ export class MockSensorAPI extends EventEmitter implements ISensorAPI {
             clearInterval(this.autoDetectionInterval);
         }
 
+        const adjustedInterval = TimeUtility.adjustInterval(intervalMs);
         this.autoDetectionInterval = setInterval(() => {
             if (this.detecting) {
                 const pos = positionProvider();
                 this.checkDetection(pos.x, pos.y);
             }
-        }, intervalMs);
+        }, adjustedInterval);
 
-        console.log(`[MockSensor] Auto-detection enabled (interval: ${intervalMs}ms)`);
+        console.log(`[MockSensor] Auto-detection enabled (interval: ${intervalMs}ms, adjusted: ${adjustedInterval}ms)`);
     }
 
     /**
