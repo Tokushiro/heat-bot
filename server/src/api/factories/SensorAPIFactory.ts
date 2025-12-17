@@ -9,12 +9,7 @@ import { MockSensorAPI } from "../implementations/mock/MockSensorAPI";
 export class SensorAPIFactory {
     private static _instance: ISensorAPI | null = null;
 
-    /**
-     * Get singleton instance of Sensor API (either real or mock)
-     * Controlled by USE_MOCK_SENSOR environment variable
-     * - "true" = Use mock implementation (simulated detection zones)
-     * - "false" or undefined = Use real implementation (BLE hardware)
-     */
+
     static getInstance(): ISensorAPI {
         if (!this._instance) {
             const useMock = process.env.USE_MOCK_SENSOR === "true";

@@ -1,14 +1,3 @@
-/**
- * Statistical Analysis Service
- *
- * Provides advanced statistical analysis for test data including:
- * - Detection probability analysis
- * - Multi-test comparison
- * - Trend analysis
- * - Confidence intervals
- * - Outlier detection
- * - Correlation analysis
- */
 
 interface TestData {
     testId: number;

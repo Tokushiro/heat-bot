@@ -23,7 +23,7 @@ export interface IRobotAPI extends EventEmitter {
     initialize(): Promise<boolean>;
 
     /**
-     * Home the robot to origin (0, 0, 0)
+     * Home the robot to origin
      */
     homeRobot(): Promise<MovementResult>;
 

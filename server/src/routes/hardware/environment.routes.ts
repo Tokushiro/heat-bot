@@ -16,13 +16,6 @@ import {
 
 const router = Router();
 
-/**
- * Environment Sensor Routes
- *
- * Endpoints for environmental monitoring (temperature, humidity)
- * during detector testing.
- */
-
 // Lifecycle management
 router.post('/initialize', initialize);
 router.post('/disconnect', disconnect);

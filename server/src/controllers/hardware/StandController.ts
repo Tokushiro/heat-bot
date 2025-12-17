@@ -1,17 +1,7 @@
 import { Request, Response } from 'express';
 import { StandAPIFactory } from '../../api/factories/StandAPIFactory';
 
-/**
- * Stand Controller
- *
- * REST API controller for rotating stand operations.
- * Provides endpoints for manual and automated detector angle control.
- */
 
-/**
- * Initialize the stand
- * POST /api/stand/initialize
- */
 export async function initialize(req: Request, res: Response) {
     try {
         console.log('[StandController] Initialize request received');
@@ -34,11 +24,7 @@ export async function initialize(req: Request, res: Response) {
     }
 }
 
-/**
- * Set detector angle
- * POST /api/stand/set-angle
- * Body: { angle: number }
- */
+
 export async function setAngle(req: Request, res: Response) {
     try {
         const { angle } = req.body;
@@ -76,11 +62,7 @@ export async function setAngle(req: Request, res: Response) {
     }
 }
 
-/**
- * Step detector angle by delta
- * POST /api/stand/step-angle
- * Body: { delta: number }
- */
+
 export async function stepAngle(req: Request, res: Response) {
     try {
         const { delta } = req.body;
@@ -114,10 +96,7 @@ export async function stepAngle(req: Request, res: Response) {
     }
 }
 
-/**
- * Get current angle
- * GET /api/stand/current-angle
- */
+
 export async function getCurrentAngle(req: Request, res: Response) {
     try {
         const stand = StandAPIFactory.getStandAPI();
@@ -136,10 +115,7 @@ export async function getCurrentAngle(req: Request, res: Response) {
     }
 }
 
-/**
- * Calibrate zero angle
- * POST /api/stand/calibrate
- */
+
 export async function calibrateZero(req: Request, res: Response) {
     try {
         console.log('[StandController] Calibrate zero angle request');
@@ -167,10 +143,7 @@ export async function calibrateZero(req: Request, res: Response) {
     }
 }
 
-/**
- * Get stand status
- * GET /api/stand/status
- */
+
 export async function getStatus(req: Request, res: Response) {
     try {
         const stand = StandAPIFactory.getStandAPI();
@@ -186,10 +159,7 @@ export async function getStatus(req: Request, res: Response) {
     }
 }
 
-/**
- * Disconnect stand
- * POST /api/stand/disconnect
- */
+
 export async function disconnect(req: Request, res: Response) {
     try {
         console.log('[StandController] Disconnect request');

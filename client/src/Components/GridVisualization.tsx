@@ -1,18 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import '../Styles/GridVisualization.css';
 
-/**
- * Grid Visualization Component
- *
- * Displays grid-based detector coverage test results.
- * Features:
- * - Color-coded cells (green = passed, red = failed, gray = pending)
- * - Coverage percentage display
- * - Real-time progress updates
- * - Cell selection to view detailed results
- * - Test configuration display
- */
-
 interface GridPosition {
     x: number;
     y: number;

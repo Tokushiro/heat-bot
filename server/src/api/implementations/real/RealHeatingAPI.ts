@@ -8,15 +8,7 @@ import {
 } from '../../interfaces/IHeatingAPI';
 import { SerialManager } from '../../../services/core/SerialManager';
 
-/**
- * Real Heating Controller
- *
- * Controls the actual thermal manikin heating hardware via SerialManager.
- * All commands are sent through the single serial connection.
- *
- * Commands follow the format: heating_<command>[:<params>]
- * See SERIAL_PROTOCOL_SPECIFICATION.md for details.
- */
+
 export class RealHeatingAPI implements IHeatingAPI {
     private static instance: RealHeatingAPI;
     private serialManager: SerialManager;

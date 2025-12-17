@@ -2,16 +2,6 @@ import { IHeatingAPI } from '../interfaces/IHeatingAPI';
 import { MockHeatingAPI } from '../implementations/mock/MockHeatingAPI';
 import { RealHeatingAPI } from '../implementations/real/RealHeatingAPI';
 
-/**
- * Heating API Factory
- *
- * Creates the appropriate heating controller implementation based on environment configuration.
- * Uses singleton pattern to ensure only one instance exists.
- *
- * Environment Variables:
- * - USE_MOCK_HEATING: Set to 'true' to use mock implementation (default)
- * - HEATING_PORT: Serial/communication port for real heating hardware
- */
 export class HeatingAPIFactory {
     private static instance: IHeatingAPI | null = null;
 

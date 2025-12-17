@@ -9,18 +9,7 @@ import {
 } from '../../interfaces/IEnvironmentAPI';
 import { TimeUtility } from '../../../utils/TimeUtility';
 
-/**
- * Mock Environment Sensor
- *
- * Simulates ambient temperature and humidity monitoring without requiring real hardware.
- * Features realistic environmental simulation including:
- * - Gradual temperature/humidity changes
- * - Daily temperature variations
- * - Random fluctuations
- * - Calibration offsets
- *
- * Used for development, testing, and demonstration purposes.
- */
+
 export class MockEnvironmentAPI implements IEnvironmentAPI {
     private static instance: MockEnvironmentAPI;
 

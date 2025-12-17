@@ -5,17 +5,6 @@ import { api } from './apiAxios';
 
 const { Text, Title } = Typography;
 
-/**
- * Stand Angle Control Component
- *
- * Provides manual control of the rotating stand for detector positioning.
- * Features:
- * - Current angle display with rotating visual indicator
- * - Manual angle input (0-360°)
- * - Step buttons for fine control (±5°, ±10°)
- * - Zero calibration
- * - Connection status
- */
 
 interface StandStatus {
     connected: boolean;

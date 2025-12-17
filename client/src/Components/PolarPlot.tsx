@@ -1,24 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import '../Styles/PolarPlot.css';
 
-/**
- * Polar Plot Component
- *
- * Displays detector coverage data in polar coordinates (angle vs. distance).
- * Features:
- * - Circular plot with angle (0-360°) and distance axes
- * - Detection events plotted as points
- * - Optional detection zone overlay
- * - Gridlines for angle and distance
- * - Interactive tooltips
- * - Real-time data updates
- *
- * Use cases:
- * - Visualize detector field of view
- * - Show detection pattern at different angles
- * - Compare measured detection boundary with theoretical boundary
- * - Identify angular variations in sensitivity
- */
 
 interface PolarDataPoint {
     angle: number;       // Angle in degrees (0-360)
@@ -33,13 +15,13 @@ interface PolarDataPoint {
 
 interface PolarPlotProps {
     data: PolarDataPoint[];
-    maxDistance?: number;          // Maximum distance for plot (default 4m)
-    showGrid?: boolean;            // Show angle/distance gridlines
-    showIdealBoundary?: boolean;   // Show theoretical detection boundary
-    idealBoundaryDistance?: number; // Distance for ideal boundary
-    width?: number;                // Canvas width in pixels
-    height?: number;               // Canvas height in pixels
-    title?: string;                // Plot title
+    maxDistance?: number;
+    showGrid?: boolean;
+    showIdealBoundary?: boolean;
+    idealBoundaryDistance?: number;
+    width?: number;
+    height?: number;
+    title?: string;
     onPointHover?: (point: PolarDataPoint | null) => void;
 }
 

@@ -3,17 +3,7 @@ import { IECExportService } from '../../services/export/IECExportService';
 import { ExcelTemplateService } from '../../services/export/ExcelTemplateService';
 import pool from '../../db_conn';
 
-/**
- * Export Controller
- *
- * REST API controller for exporting test data in IEC-compliant formats.
- * Provides endpoints for boundary, grid, and radial test exports.
- */
 
-/**
- * Export boundary test in IEC format
- * GET /api/export/boundary/:testId
- */
 export async function exportBoundaryTest(req: Request, res: Response) {
     try {
         const testId = parseInt(req.params.testId, 10);
@@ -107,10 +97,7 @@ export async function exportBoundaryTest(req: Request, res: Response) {
     }
 }
 
-/**
- * Export grid test in IEC format
- * GET /api/export/grid/:testId
- */
+
 export async function exportGridTest(req: Request, res: Response) {
     try {
         const testId = parseInt(req.params.testId, 10);

@@ -1,13 +1,3 @@
-/**
- * IEC Export Service
- *
- * Generates IEC-compliant CSV exports for different test types.
- * Provides template-based formatters matching Excel templates for:
- * - Boundary Detection Tests
- * - Grid Tangential Tests
- * - Radial Polar Tests
- */
-
 interface TestMetadata {
     testId: number;
     testName: string;

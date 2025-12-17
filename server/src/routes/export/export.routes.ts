@@ -9,11 +9,6 @@ import {
 
 const router = Router();
 
-/**
- * Export Routes
- *
- * IEC-compliant CSV export endpoints for test data
- */
 
 // Comprehensive test export (all test types combined - IEC 63180 format)
 router.get('/comprehensive/:testId', exportComprehensiveTest);

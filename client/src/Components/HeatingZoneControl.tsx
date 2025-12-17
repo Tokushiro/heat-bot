@@ -5,21 +5,6 @@ import { api } from './apiAxios';
 
 const { Text, Title } = Typography;
 
-/**
- * Heating Zone Control Component
- *
- * Provides control for the thermal manikin heating system with three zones:
- * - HEAD: Ambient + 14°C
- * - BODY: Ambient + 7°C
- * - LEGS: Ambient + 7°C
- *
- * Features:
- * - Real-time temperature monitoring for each zone
- * - Enable/disable per zone
- * - Temperature target adjustment
- * - Visual status indicators
- * - Min/Max/Avg temperature statistics
- */
 
 interface HeatingZoneStatus {
     zone: string;

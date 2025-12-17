@@ -3,11 +3,6 @@ import * as heatingController from '../../controllers/hardware/HeatingController
 
 const router = Router();
 
-/**
- * Heating Control Routes
- * Base path: /api/heating
- */
-
 // Initialize heating system
 router.post('/initialize', heatingController.initialize);
 

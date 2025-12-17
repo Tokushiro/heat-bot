@@ -1,13 +1,6 @@
 import pool from "../../db_conn";
 import { HeatingZoneStatus } from "../../api/interfaces/IHeatingAPI";
 
-/**
- * Telemetry Service
- *
- * Manages telemetry data storage and retrieval.
- * Records real-time environmental conditions, heating status,
- * and robot position during test execution.
- */
 
 export interface TelemetrySample {
     telemetry_id?: number;

@@ -1,16 +1,7 @@
 import { Request, Response } from 'express';
 import { DeadTimeService } from '../../services/timing/DeadTimeService';
 
-/**
- * Dead Time Controller
- *
- * REST API endpoints for dead time analysis and timing data
- */
 
-/**
- * Get dead time summary for a test
- * GET /api/timing/summary/:testId
- */
 export async function getDeadTimeSummary(req: Request, res: Response) {
     try {
         const testId = parseInt(req.params.testId, 10);
@@ -37,10 +28,7 @@ export async function getDeadTimeSummary(req: Request, res: Response) {
     }
 }
 
-/**
- * Get dead time breakdown by reason for a test
- * GET /api/timing/breakdown/:testId
- */
+
 export async function getDeadTimeBreakdown(req: Request, res: Response) {
     try {
         const testId = parseInt(req.params.testId, 10);
@@ -67,10 +55,7 @@ export async function getDeadTimeBreakdown(req: Request, res: Response) {
     }
 }
 
-/**
- * Get all dead time logs for a test
- * GET /api/timing/logs/:testId
- */
+
 export async function getDeadTimeLogs(req: Request, res: Response) {
     try {
         const testId = parseInt(req.params.testId, 10);
@@ -97,11 +82,7 @@ export async function getDeadTimeLogs(req: Request, res: Response) {
     }
 }
 
-/**
- * Compare dead time across multiple tests
- * POST /api/timing/compare
- * Body: { testIds: number[] }
- */
+
 export async function compareDeadTime(req: Request, res: Response) {
     try {
         const { testIds } = req.body;
@@ -128,10 +109,7 @@ export async function compareDeadTime(req: Request, res: Response) {
     }
 }
 
-/**
- * Get average dead time by test type
- * GET /api/timing/average-by-type
- */
+
 export async function getAverageDeadTimeByType(req: Request, res: Response) {
     try {
         console.log('[DeadTimeController] Getting average dead time by test type');

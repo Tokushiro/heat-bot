@@ -8,25 +8,7 @@ import {
     STANDARD_GRID_CONFIGS
 } from '../../interfaces/IGridTestAPI';
 
-/**
- * Real Grid Test API
- *
- * Controls actual robot movement for grid-based testing.
- * This implementation will be completed when robot specifications are available.
- *
- * Requirements:
- * - Robot controller interface (ROS, custom protocol, etc.)
- * - Position feedback system
- * - Movement planning and collision avoidance
- * - Integration with stand controller for rotation
- * - Real-time telemetry collection
- *
- * TODO: Implement actual robot control
- * - Connect to robot controller
- * - Implement movement commands
- * - Add position verification
- * - Implement safety checks
- */
+
 export class RealGridTestAPI implements IGridTestAPI {
     private static instance: RealGridTestAPI;
 

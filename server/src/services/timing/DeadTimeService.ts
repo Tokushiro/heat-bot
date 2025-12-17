@@ -1,12 +1,6 @@
 import pool from '../../db_conn';
 import { DeadTimeManager, DeadTimeReason, DeadTimeLog } from './DeadTimeManager';
 
-/**
- * Dead Time Service
- *
- * Integrates DeadTimeManager with database logging for IEC compliance
- * and timing analysis.
- */
 
 export interface DeadTimeSummary {
     testId: number;

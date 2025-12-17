@@ -1,19 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import '../Styles/BoundaryComparisonPlot.css';
 
-/**
- * Boundary Comparison Plot
- *
- * Overlays ideal boundary (pink circle) with measured boundary (green line).
- * Shows deviations between theoretical and actual detection boundaries.
- *
- * Use cases:
- * - Compare measured detector boundary with specification
- * - Identify angular variations in detection range
- * - Visualize boundary shape irregularities
- * - Quality control and validation
- */
-
 interface BoundaryPoint {
     angle: number;      // Angle in degrees (0-360)
     distance: number;   // Measured distance in meters

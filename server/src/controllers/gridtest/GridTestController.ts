@@ -2,17 +2,7 @@ import { Request, Response } from 'express';
 import { GridTestAPIFactory } from '../../api/factories/GridTestAPIFactory';
 import { GridTestConfig } from '../../api/interfaces/IGridTestAPI';
 
-/**
- * Grid Test Controller
- *
- * REST API controller for grid-based detector coverage testing.
- * Provides endpoints for test execution, progress tracking, and result retrieval.
- */
 
-/**
- * Initialize grid test system
- * POST /api/gridtest/initialize
- */
 export async function initialize(req: Request, res: Response) {
     try {
         console.log('[GridTestController] Initialize request received');
@@ -35,11 +25,7 @@ export async function initialize(req: Request, res: Response) {
     }
 }
 
-/**
- * Generate grid positions
- * POST /api/gridtest/generate-grid
- * Body: { gridWidth: number, gridHeight: number, cellSize: number }
- */
+
 export async function generateGrid(req: Request, res: Response) {
     try {
         const { gridWidth, gridHeight, cellSize } = req.body;
@@ -64,11 +50,7 @@ export async function generateGrid(req: Request, res: Response) {
     }
 }
 
-/**
- * Start grid test
- * POST /api/gridtest/start
- * Body: GridTestConfig
- */
+
 export async function startTest(req: Request, res: Response) {
     try {
         const config: GridTestConfig = req.body;
@@ -107,10 +89,7 @@ export async function startTest(req: Request, res: Response) {
     }
 }
 
-/**
- * Pause current test
- * POST /api/gridtest/pause
- */
+
 export async function pauseTest(req: Request, res: Response) {
     try {
         console.log('[GridTestController] Pause test request');
@@ -133,10 +112,7 @@ export async function pauseTest(req: Request, res: Response) {
     }
 }
 
-/**
- * Resume paused test
- * POST /api/gridtest/resume
- */
+
 export async function resumeTest(req: Request, res: Response) {
     try {
         console.log('[GridTestController] Resume test request');
@@ -159,10 +135,7 @@ export async function resumeTest(req: Request, res: Response) {
     }
 }
 
-/**
- * Stop current test
- * POST /api/gridtest/stop
- */
+
 export async function stopTest(req: Request, res: Response) {
     try {
         console.log('[GridTestController] Stop test request');
@@ -182,10 +155,7 @@ export async function stopTest(req: Request, res: Response) {
     }
 }
 
-/**
- * Get test progress
- * GET /api/gridtest/progress
- */
+
 export async function getProgress(req: Request, res: Response) {
     try {
         const gridTest = GridTestAPIFactory.getGridTestAPI();
@@ -201,10 +171,7 @@ export async function getProgress(req: Request, res: Response) {
     }
 }
 
-/**
- * Get test result
- * GET /api/gridtest/result/:testId
- */
+
 export async function getTestResult(req: Request, res: Response) {
     try {
         const testId = parseInt(req.params.testId, 10);
@@ -230,11 +197,7 @@ export async function getTestResult(req: Request, res: Response) {
     }
 }
 
-/**
- * Get cell result
- * GET /api/gridtest/cell-result
- * Query params: cellX, cellY
- */
+
 export async function getCellResult(req: Request, res: Response) {
     try {
         const cellX = parseInt(req.query.cellX as string, 10);
@@ -261,11 +224,7 @@ export async function getCellResult(req: Request, res: Response) {
     }
 }
 
-/**
- * Move to grid position (manual control)
- * POST /api/gridtest/move-to-position
- * Body: { x: number, y: number, cellX: number, cellY: number }
- */
+
 export async function moveToPosition(req: Request, res: Response) {
     try {
         const { x, y, cellX, cellY } = req.body;
@@ -294,10 +253,7 @@ export async function moveToPosition(req: Request, res: Response) {
     }
 }
 
-/**
- * Get current position
- * GET /api/gridtest/current-position
- */
+
 export async function getCurrentPosition(req: Request, res: Response) {
     try {
         const gridTest = GridTestAPIFactory.getGridTestAPI();
@@ -317,11 +273,7 @@ export async function getCurrentPosition(req: Request, res: Response) {
     }
 }
 
-/**
- * Validate test configuration
- * POST /api/gridtest/validate-config
- * Body: Partial<GridTestConfig>
- */
+
 export async function validateConfig(req: Request, res: Response) {
     try {
         const config = req.body;
@@ -339,10 +291,7 @@ export async function validateConfig(req: Request, res: Response) {
     }
 }
 
-/**
- * Get system status
- * GET /api/gridtest/status
- */
+
 export async function getStatus(req: Request, res: Response) {
     try {
         const gridTest = GridTestAPIFactory.getGridTestAPI();
@@ -358,10 +307,7 @@ export async function getStatus(req: Request, res: Response) {
     }
 }
 
-/**
- * Disconnect grid test system
- * POST /api/gridtest/disconnect
- */
+
 export async function disconnect(req: Request, res: Response) {
     try {
         console.log('[GridTestController] Disconnect request');

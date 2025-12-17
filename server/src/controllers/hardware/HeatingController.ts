@@ -3,17 +3,6 @@ import { HeatingAPIFactory } from '../../api/factories/HeatingAPIFactory';
 import { HeatingZone } from '../../api/interfaces/IHeatingAPI';
 import { TelemetryService } from '../../services/telemetry/TelemetryService';
 
-/**
- * Heating Controller
- *
- * REST API controller for thermal manikin heating system.
- * Provides endpoints for temperature control of Head, Body, and Legs zones.
- */
-
-/**
- * Initialize the heating system
- * POST /api/heating/initialize
- */
 export async function initialize(req: Request, res: Response) {
     try {
         console.log('[HeatingController] Initialize request received');
@@ -36,11 +25,7 @@ export async function initialize(req: Request, res: Response) {
     }
 }
 
-/**
- * Set target temperature for a zone
- * POST /api/heating/set-temperature
- * Body: { zone: string, temperature: number }
- */
+
 export async function setTemperature(req: Request, res: Response) {
     try {
         const { zone, temperature } = req.body;
@@ -102,11 +87,7 @@ export async function setTemperature(req: Request, res: Response) {
     }
 }
 
-/**
- * Set temperature offset from ambient
- * POST /api/heating/set-offset
- * Body: { zone: string, offset: number }
- */
+
 export async function setOffset(req: Request, res: Response) {
     try {
         const { zone, offset } = req.body;
@@ -145,11 +126,7 @@ export async function setOffset(req: Request, res: Response) {
     }
 }
 
-/**
- * Enable heating for a zone
- * POST /api/heating/enable
- * Body: { zone: string }
- */
+
 export async function enableZone(req: Request, res: Response) {
     try {
         const { zone } = req.body;
@@ -188,11 +165,7 @@ export async function enableZone(req: Request, res: Response) {
     }
 }
 
-/**
- * Disable heating for a zone
- * POST /api/heating/disable
- * Body: { zone: string }
- */
+
 export async function disableZone(req: Request, res: Response) {
     try {
         const { zone } = req.body;
@@ -231,10 +204,7 @@ export async function disableZone(req: Request, res: Response) {
     }
 }
 
-/**
- * Enable all heating zones
- * POST /api/heating/enable-all
- */
+
 export async function enableAll(req: Request, res: Response) {
     try {
         console.log('[HeatingController] Enable all zones');
@@ -262,10 +232,7 @@ export async function enableAll(req: Request, res: Response) {
     }
 }
 
-/**
- * Disable all heating zones
- * POST /api/heating/disable-all
- */
+
 export async function disableAll(req: Request, res: Response) {
     try {
         console.log('[HeatingController] Disable all zones');
@@ -293,10 +260,7 @@ export async function disableAll(req: Request, res: Response) {
     }
 }
 
-/**
- * Get zone status
- * GET /api/heating/zone/:zone
- */
+
 export async function getZoneStatus(req: Request, res: Response) {
     try {
         const { zone } = req.params;
@@ -319,10 +283,7 @@ export async function getZoneStatus(req: Request, res: Response) {
     }
 }
 
-/**
- * Get all zones status
- * GET /api/heating/zones
- */
+
 export async function getAllZonesStatus(req: Request, res: Response) {
     try {
         const heating = HeatingAPIFactory.getHeatingAPI();
@@ -338,10 +299,7 @@ export async function getAllZonesStatus(req: Request, res: Response) {
     }
 }
 
-/**
- * Get system status
- * GET /api/heating/status
- */
+
 export async function getStatus(req: Request, res: Response) {
     try {
         const heating = HeatingAPIFactory.getHeatingAPI();
@@ -357,11 +315,7 @@ export async function getStatus(req: Request, res: Response) {
     }
 }
 
-/**
- * Set ambient temperature
- * POST /api/heating/set-ambient
- * Body: { temperature: number }
- */
+
 export async function setAmbient(req: Request, res: Response) {
     try {
         const { temperature } = req.body;
@@ -390,10 +344,7 @@ export async function setAmbient(req: Request, res: Response) {
     }
 }
 
-/**
- * Disconnect heating system
- * POST /api/heating/disconnect
- */
+
 export async function disconnect(req: Request, res: Response) {
     try {
         console.log('[HeatingController] Disconnect request');

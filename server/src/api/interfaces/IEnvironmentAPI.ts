@@ -1,30 +1,4 @@
-/**
- * Environment Sensor API Interface
- *
- * Provides abstraction for monitoring ambient environmental conditions.
- * Tracks temperature and humidity for compliance testing per EN 50131 requirements.
- *
- * IEC/EN Requirements:
- * - Temperature: Typically 15-35°C operating range
- * - Humidity: ~70% RH optimal for PIR sensors (per EN 50131)
- * - Monitoring interval: Continuous during testing
- *
- * Used for:
- * - Recording ambient conditions during tests
- * - Adjusting heating system targets (ambient + offset)
- * - Environmental compliance verification
- * - Correlation with sensor performance
- */
-
 export interface IEnvironmentAPI {
-    /**
-     * Initialize the environment monitoring system
-     * - Establishes connection to sensors
-     * - Calibrates sensors if needed
-     * - Starts continuous monitoring
-     *
-     * @throws Error if sensors cannot be initialized
-     */
     initialize(): Promise<void>;
 
     /**

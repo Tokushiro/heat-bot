@@ -1,20 +1,3 @@
-/**
- * Heating Controller Interface
- *
- * Provides abstraction for controlling the thermal manikin heating system.
- * The system maintains three independent heating zones (Head, Body, Legs) at specific
- * temperatures relative to ambient conditions.
- *
- * Temperature Requirements (per IEC/EN specifications):
- * - Head: Ambient + 14°C
- * - Body: Ambient + 7°C
- * - Legs: Ambient + 7°C
- *
- * Used for:
- * - PIR sensor testing with realistic thermal signature
- * - Compliance testing per EN 50131 and similar standards
- * - Thermal calibration and validation
- */
 
 export interface IHeatingAPI {
     /**

@@ -1,18 +1,7 @@
 import { IStandAPI, StandStatus, StandConfig } from '../../interfaces/IStandAPI';
 import { TimeUtility } from '../../../utils/TimeUtility';
 
-/**
- * Mock Stand Controller
- *
- * Simulates a rotating stand for the PIR detector without requiring real hardware.
- * Used for development, testing, and demonstration purposes.
- *
- * Features:
- * - Instant angle changes (simulated movement time)
- * - Angle wrapping (0-360° range)
- * - Calibration simulation
- * - Status tracking
- */
+
 export class MockStandAPI implements IStandAPI {
     private static instance: MockStandAPI;
 

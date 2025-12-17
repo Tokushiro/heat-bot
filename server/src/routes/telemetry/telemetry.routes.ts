@@ -3,11 +3,6 @@ import * as telemetryController from '../../controllers/telemetry/TelemetryContr
 
 const router = Router();
 
-/**
- * Telemetry Routes
- * Base path: /api/telemetry
- */
-
 // Record telemetry sample
 router.post('/record', telemetryController.recordSample);
 

@@ -2,19 +2,7 @@ import { IGridTestAPI } from '../interfaces/IGridTestAPI';
 import { MockGridTestAPI } from '../implementations/mock/MockGridTestAPI';
 import { RealGridTestAPI } from '../implementations/real/RealGridTestAPI';
 
-/**
- * Grid Test API Factory
- *
- * Creates the appropriate grid test implementation based on configuration.
- * Uses singleton pattern to ensure only one instance exists.
- *
- * Environment Variables:
- * - USE_MOCK_GRIDTEST: Set to 'true' to use mock implementation (default)
- * - GRIDTEST_ROBOT_PORT: Serial port for real robot (e.g., '/dev/ttyUSB2' or 'COM3')
- *
- * Note: Real implementation will communicate through SerialManager,
- * similar to the robot API implementation.
- */
+
 export class GridTestAPIFactory {
     private static instance: IGridTestAPI | null = null;
 

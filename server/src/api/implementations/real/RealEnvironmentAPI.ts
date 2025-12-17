@@ -8,20 +8,6 @@ import {
 } from '../../interfaces/IEnvironmentAPI';
 import { SerialManager } from '../../../services/core/SerialManager';
 
-/**
- * Real Environment Sensor
- *
- * Controls actual temperature and humidity sensors via SerialManager.
- * All commands are sent through the single serial connection.
- *
- * Commands follow the format: env_<command>
- * See SERIAL_PROTOCOL_SPECIFICATION.md for details.
- *
- * Supported Sensors:
- * - DHT22 (Digital temperature/humidity sensor)
- * - BME280 (Temperature/humidity/pressure sensor)
- * - SHT31 (High-accuracy temperature/humidity sensor)
- */
 export class RealEnvironmentAPI implements IEnvironmentAPI {
     private static instance: RealEnvironmentAPI;
     private serialManager: SerialManager;
