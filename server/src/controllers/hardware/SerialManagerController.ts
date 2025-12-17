@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { SerialManager } from "../../services/core/SerialManager";
+import { SerialPort } from "serialport";
 
 export async function connectSerial(req: Request, res: Response) {
     const { path, baudRate } = req.body || {};
@@ -63,4 +64,26 @@ export function serialStream(req: Request, res: Response) {
         SerialManager.instance.off("status", onStatus);
         res.end();
     });
+}
+
+export async function listSerialPorts(_req: Request, res: Response) {
+    try {
+        const ports = await SerialPort.list();
+        res.json({ ports });
+    } catch (err: any) {
+        res.status(500).json({ error: String(err?.message ?? err) });
+    }
+}
+
+export function getMockMode(_req: Request, res: Response) {
+    const mockMode = {
+        robot: process.env.USE_MOCK_ROBOT !== "false",
+        sensor: process.env.USE_MOCK_SENSOR !== "false",
+        stand: process.env.USE_MOCK_STAND !== "false",
+        heating: process.env.USE_MOCK_HEATING !== "false",
+        environment: process.env.USE_MOCK_ENVIRONMENT !== "false",
+        gridtest: process.env.USE_MOCK_GRIDTEST !== "false"
+    };
+    const allMock = Object.values(mockMode).every(v => v);
+    res.json({ mockMode, allMock });
 }
