@@ -196,4 +196,3 @@ pip install --upgrade -r requirements.txt.txt
 # 📄 License
 
 MIT License  
-(or replace with your project license)
