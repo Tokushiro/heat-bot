@@ -25,11 +25,23 @@ export async function startMasterTest(req: Request, res: Response) {
         const orchestrator = MasterTestOrchestrator.instance;
         const executionState = orchestrator.getExecutionState();
 
-        // Check if test is running or in a non-idle state
-        if (executionState !== TestExecutionState.IDLE && executionState !== TestExecutionState.ERROR) {
+        // If test is in a complete or error state, automatically reset to IDLE
+        const completeStates = [
+            TestExecutionState.ALL_COMPLETE,
+            TestExecutionState.BOUNDARY_COMPLETE,
+            TestExecutionState.TANGENTIAL_COMPLETE,
+            TestExecutionState.RADIAL_COMPLETE,
+            TestExecutionState.ERROR
+        ];
+
+        if (completeStates.includes(executionState)) {
+            console.log(`[MasterTest Controller] Test in ${executionState} state - resetting to IDLE before starting new test`);
+            await orchestrator.resetToIdle();
+        } else if (executionState !== TestExecutionState.IDLE) {
+            // Test is running or paused - cannot start new test
             console.warn(`[MasterTest Controller] ⚠️ Test in state: ${executionState}`);
             return res.status(409).json({
-                error: `Cannot start test. Current state: ${executionState}`,
+                error: `Cannot start test. Current state: ${executionState}. Please stop or complete the current test first.`,
                 execution_state: executionState
             });
         }

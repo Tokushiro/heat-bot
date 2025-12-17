@@ -197,13 +197,13 @@ export class MasterTestOrchestrator extends EventEmitter {
             [TestExecutionState.IDLE]: [TestExecutionState.BOUNDARY_RUNNING, TestExecutionState.ERROR],
             [TestExecutionState.BOUNDARY_RUNNING]: [TestExecutionState.BOUNDARY_PAUSED, TestExecutionState.BOUNDARY_COMPLETE, TestExecutionState.ERROR],
             [TestExecutionState.BOUNDARY_PAUSED]: [TestExecutionState.BOUNDARY_RUNNING, TestExecutionState.ERROR],
-            [TestExecutionState.BOUNDARY_COMPLETE]: [TestExecutionState.TANGENTIAL_RUNNING, TestExecutionState.RADIAL_RUNNING, TestExecutionState.ERROR],
+            [TestExecutionState.BOUNDARY_COMPLETE]: [TestExecutionState.TANGENTIAL_RUNNING, TestExecutionState.RADIAL_RUNNING, TestExecutionState.IDLE, TestExecutionState.ERROR],
             [TestExecutionState.TANGENTIAL_RUNNING]: [TestExecutionState.TANGENTIAL_PAUSED, TestExecutionState.TANGENTIAL_COMPLETE, TestExecutionState.ERROR],
             [TestExecutionState.TANGENTIAL_PAUSED]: [TestExecutionState.TANGENTIAL_RUNNING, TestExecutionState.ERROR],
-            [TestExecutionState.TANGENTIAL_COMPLETE]: [TestExecutionState.RADIAL_RUNNING, TestExecutionState.ALL_COMPLETE, TestExecutionState.ERROR],
+            [TestExecutionState.TANGENTIAL_COMPLETE]: [TestExecutionState.RADIAL_RUNNING, TestExecutionState.ALL_COMPLETE, TestExecutionState.IDLE, TestExecutionState.ERROR],
             [TestExecutionState.RADIAL_RUNNING]: [TestExecutionState.RADIAL_PAUSED, TestExecutionState.RADIAL_COMPLETE, TestExecutionState.ERROR],
             [TestExecutionState.RADIAL_PAUSED]: [TestExecutionState.RADIAL_RUNNING, TestExecutionState.ERROR],
-            [TestExecutionState.RADIAL_COMPLETE]: [TestExecutionState.TANGENTIAL_RUNNING, TestExecutionState.ALL_COMPLETE, TestExecutionState.ERROR],
+            [TestExecutionState.RADIAL_COMPLETE]: [TestExecutionState.TANGENTIAL_RUNNING, TestExecutionState.ALL_COMPLETE, TestExecutionState.IDLE, TestExecutionState.ERROR],
             [TestExecutionState.ALL_COMPLETE]: [TestExecutionState.IDLE],
             [TestExecutionState.ERROR]: [TestExecutionState.IDLE]
         };
@@ -499,6 +499,40 @@ export class MasterTestOrchestrator extends EventEmitter {
         });
 
         console.log("[MasterTest] Test stopped");
+    }
+
+    /**
+     * Reset orchestrator to IDLE state (ready for new test)
+     * Can be called from COMPLETE or ERROR states
+     */
+    async resetToIdle(): Promise<void> {
+        console.log("[MasterTest] Resetting orchestrator to IDLE...");
+
+        // Only allow reset from complete or error states
+        const allowedStates = [
+            TestExecutionState.ALL_COMPLETE,
+            TestExecutionState.BOUNDARY_COMPLETE,
+            TestExecutionState.TANGENTIAL_COMPLETE,
+            TestExecutionState.RADIAL_COMPLETE,
+            TestExecutionState.ERROR
+        ];
+
+        if (!allowedStates.includes(this.executionState)) {
+            throw new Error(`Cannot reset from state: ${this.executionState}. Test must be complete or in error state.`);
+        }
+
+        // Clear test state
+        this.currentTest = null;
+        this.testState = null;
+        this.currentStepId = null;
+        this.detectionBuffer = [];
+        this.stopRequested = false;
+        this.sequenceCounter = 0;
+
+        // Transition to IDLE
+        await this.transitionState(TestExecutionState.IDLE);
+
+        console.log("[MasterTest] Reset complete - ready for new test");
     }
 
     // =========================================================================
